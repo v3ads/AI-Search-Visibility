@@ -1,11 +1,10 @@
 export const PROJECT_ID = "demo_project_001";
 
 export const AI_MODELS = [
-  "ChatGPT (Web)",
   "ChatGPT",
-  "Perplexity Sonar",
-  "Google Gemini",
   "Claude",
+  "Google Gemini",
+  "Grok",
 ] as const;
 
 export const INTENTS = [
@@ -25,11 +24,10 @@ export const INTENT_COLORS: Record<string, string> = {
 };
 
 export const MODEL_COLORS: Record<string, string> = {
-  "ChatGPT (Web)": "#22c55e",
-  "ChatGPT": "#10b981",
-  "Perplexity Sonar": "#3b82f6",
-  "Google Gemini": "#f59e0b",
+  "ChatGPT": "#22c55e",
   "Claude": "#8b5cf6",
+  "Google Gemini": "#f59e0b",
+  "Grok": "#3b82f6",
 };
 
 export const PRIORITY_COLORS: Record<string, string> = {

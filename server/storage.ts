@@ -1,11 +1,12 @@
 import { eq, and, desc } from "drizzle-orm";
 import { db } from "./db";
 import {
-  users, projects, tags, prompts, competitors, dailyMetrics, boostActions, citations,
+  users, projects, tags, prompts, competitors, dailyMetrics, boostActions, citations, analysisRuns,
   type User, type InsertUser, type Project, type InsertProject,
   type Tag, type InsertTag, type Prompt, type InsertPrompt,
   type Competitor, type InsertCompetitor, type DailyMetric, type InsertDailyMetric,
   type BoostAction, type InsertBoostAction, type Citation, type InsertCitation,
+  type AnalysisRun, type InsertAnalysisRun,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -31,6 +32,11 @@ export interface IStorage {
   updateBoostAction(id: number, data: Partial<InsertBoostAction>): Promise<BoostAction>;
   getCitations(projectId: string): Promise<Citation[]>;
   createCitation(citation: InsertCitation): Promise<Citation>;
+  upsertCitation(citation: InsertCitation): Promise<Citation>;
+  getAnalysisRuns(projectId: string): Promise<AnalysisRun[]>;
+  getAnalysisRun(id: number): Promise<AnalysisRun | undefined>;
+  createAnalysisRun(run: InsertAnalysisRun): Promise<AnalysisRun>;
+  updateAnalysisRun(id: number, data: Partial<AnalysisRun>): Promise<AnalysisRun>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -133,6 +139,41 @@ export class DatabaseStorage implements IStorage {
   async createCitation(citation: InsertCitation): Promise<Citation> {
     const [created] = await db.insert(citations).values(citation).returning();
     return created;
+  }
+
+  async upsertCitation(citation: InsertCitation): Promise<Citation> {
+    const existing = await db.select().from(citations).where(
+      and(eq(citations.projectId, citation.projectId), eq(citations.url, citation.url))
+    );
+    if (existing.length > 0) {
+      const [updated] = await db.update(citations)
+        .set({ citationCount: (existing[0].citationCount || 0) + 1 })
+        .where(eq(citations.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    return this.createCitation(citation);
+  }
+
+  async getAnalysisRuns(projectId: string): Promise<AnalysisRun[]> {
+    return db.select().from(analysisRuns)
+      .where(eq(analysisRuns.projectId, projectId))
+      .orderBy(desc(analysisRuns.startedAt));
+  }
+
+  async getAnalysisRun(id: number): Promise<AnalysisRun | undefined> {
+    const [run] = await db.select().from(analysisRuns).where(eq(analysisRuns.id, id));
+    return run;
+  }
+
+  async createAnalysisRun(run: InsertAnalysisRun): Promise<AnalysisRun> {
+    const [created] = await db.insert(analysisRuns).values(run).returning();
+    return created;
+  }
+
+  async updateAnalysisRun(id: number, data: Partial<AnalysisRun>): Promise<AnalysisRun> {
+    const [updated] = await db.update(analysisRuns).set(data).where(eq(analysisRuns.id, id)).returning();
+    return updated;
   }
 }
 

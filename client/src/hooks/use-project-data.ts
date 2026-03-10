@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { PROJECT_ID } from "@/lib/constants";
-import type { Project, Tag, Prompt, Competitor, DailyMetric, BoostAction, Citation } from "@shared/schema";
+import type { Project, Tag, Prompt, Competitor, DailyMetric, BoostAction, Citation, AnalysisRun } from "@shared/schema";
 
 export function useProject() {
   return useQuery<Project>({ queryKey: ["/api/projects", PROJECT_ID] });
@@ -28,4 +28,8 @@ export function useBoostActions() {
 
 export function useCitations() {
   return useQuery<Citation[]>({ queryKey: ["/api/projects", PROJECT_ID, "citations"] });
+}
+
+export function useAnalysisRuns() {
+  return useQuery<AnalysisRun[]>({ queryKey: ["/api/projects", PROJECT_ID, "scans"] });
 }

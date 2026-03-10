@@ -4,6 +4,7 @@ import { scrypt, timingSafeEqual } from "crypto";
 import { storage } from "./storage";
 import { seedDatabase } from "./seed";
 import { insertPromptSchema, insertBoostActionSchema, insertTagSchema } from "@shared/schema";
+import { runAnalysis } from "./ai-analysis";
 
 const AUTH_USERNAME = "virta";
 const AUTH_PASSWORD_HASH = "437827299a07f71acbdae3cf2311403f:8c787d52511e60fd315f714dd0f312985c312cea153419a28addf9e346ecc95d1949e36a866d363bb1dd8e97011776d270964ed287d0618763bb645f3ed3efb2";
@@ -136,6 +137,43 @@ export async function registerRoutes(
   app.get("/api/projects/:id/citations", async (req, res) => {
     const c = await storage.getCitations(req.params.id);
     res.json(c);
+  });
+
+  app.post("/api/projects/:id/scan", async (req, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const activePrompts = (await storage.getPrompts(req.params.id)).filter((p) => p.isActive);
+      if (activePrompts.length === 0) return res.status(400).json({ message: "No active prompts to analyze" });
+
+      const run = await storage.createAnalysisRun({
+        projectId: req.params.id,
+        status: "running",
+        totalPrompts: activePrompts.length * 4,
+        completedPrompts: 0,
+        modelsUsed: ["ChatGPT", "Claude", "Google Gemini", "Grok"],
+      });
+
+      res.status(202).json({ ok: true, runId: run.id });
+
+      runAnalysis(req.params.id, run.id).catch((err) => {
+        console.error("Background scan error:", err.message);
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/projects/:id/scans", async (req, res) => {
+    const runs = await storage.getAnalysisRuns(req.params.id);
+    res.json(runs);
+  });
+
+  app.get("/api/scans/:id", async (req, res) => {
+    const run = await storage.getAnalysisRun(parseInt(req.params.id));
+    if (!run) return res.status(404).json({ message: "Scan not found" });
+    res.json(run);
   });
 
   return httpServer;

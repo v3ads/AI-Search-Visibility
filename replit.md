@@ -66,6 +66,17 @@ All routes prefixed with `/api`:
 - `PATCH /api/boost-actions/:id` - Update action status
 - `GET /api/projects/:id/citations` - Citation data
 
+## AI Analysis (RouteLLM Integration)
+- Uses RouteLLM API (Abacus.ai) at https://routellm.abacus.ai/v1/chat/completions
+- Sends tracked prompts to 4 AI models: ChatGPT (gpt-4o), Claude (claude-sonnet-4-20250514), Google Gemini (gemini-2.5-pro), Grok (grok-3)
+- Uses route-llm model to extract structured brand analysis from each response
+- Extracts: brand mentions, ranking position, sentiment score, cited URLs
+- Computes daily metrics: visibility %, share of voice %, avg rank, sentiment, brand strength
+- Service: server/ai-analysis.ts
+- Scan routes: POST /api/projects/:id/scan, GET /api/projects/:id/scans, GET /api/scans/:id
+- Dashboard has "Run AI Scan" button with polling for scan completion
+- Schema: analysis_runs table tracks scan status and progress
+
 ## Authentication
 - Session-based auth using express-session with connect-pg-simple (PostgreSQL-backed sessions)
 - Single-user hardcoded credentials (username: "virta", password hash stored in routes.ts)

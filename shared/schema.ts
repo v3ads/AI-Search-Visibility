@@ -81,6 +81,18 @@ export const citations = pgTable("citations", {
   weekChange: real("week_change").default(0),
 });
 
+export const analysisRuns = pgTable("analysis_runs", {
+  id: serial("id").primaryKey(),
+  projectId: varchar("project_id").notNull(),
+  status: text("status").notNull().default("pending"),
+  totalPrompts: integer("total_prompts").default(0),
+  completedPrompts: integer("completed_prompts").default(0),
+  modelsUsed: text("models_used").array(),
+  error: text("error"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({ username: true, password: true });
 export const insertProjectSchema = createInsertSchema(projects).omit({ createdAt: true });
 export const insertTagSchema = createInsertSchema(tags).omit({ id: true });
@@ -89,6 +101,7 @@ export const insertCompetitorSchema = createInsertSchema(competitors).omit({ id:
 export const insertDailyMetricSchema = createInsertSchema(dailyMetrics).omit({ id: true });
 export const insertBoostActionSchema = createInsertSchema(boostActions).omit({ id: true, generatedAt: true });
 export const insertCitationSchema = createInsertSchema(citations).omit({ id: true });
+export const insertAnalysisRunSchema = createInsertSchema(analysisRuns).omit({ id: true, startedAt: true, completedAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -106,3 +119,5 @@ export type BoostAction = typeof boostActions.$inferSelect;
 export type InsertBoostAction = z.infer<typeof insertBoostActionSchema>;
 export type Citation = typeof citations.$inferSelect;
 export type InsertCitation = z.infer<typeof insertCitationSchema>;
+export type AnalysisRun = typeof analysisRuns.$inferSelect;
+export type InsertAnalysisRun = z.infer<typeof insertAnalysisRunSchema>;
