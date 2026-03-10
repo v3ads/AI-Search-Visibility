@@ -1,21 +1,23 @@
-import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle } from "lucide-react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { PROJECT_ID } from "@/lib/constants";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md mx-4">
-        <CardContent className="pt-6">
-          <div className="flex mb-4 gap-2">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-            <h1 className="text-2xl font-bold text-gray-900">404 Page Not Found</h1>
-          </div>
-
-          <p className="mt-4 text-sm text-gray-600">
-            Did you forget to add the page to the router?
-          </p>
-        </CardContent>
-      </Card>
+    <div className="flex flex-col items-center justify-center min-h-[80vh] px-6 relative overflow-hidden">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-[600px] h-[600px] rounded-full bg-gradient-radial from-primary/10 via-cyan-500/5 to-transparent blur-3xl" />
+      </div>
+      <div className="relative text-center space-y-4">
+        <p className="text-7xl font-bold font-mono text-primary">404</p>
+        <h1 className="text-xl font-semibold">Beyond the Event Horizon</h1>
+        <p className="text-sm text-muted-foreground max-w-md">
+          The page you are trying to access has crossed the event horizon. No data can escape from here.
+        </p>
+        <Link href={`/projects/${PROJECT_ID}`}>
+          <Button data-testid="button-go-home">Return to Dashboard</Button>
+        </Link>
+      </div>
     </div>
   );
 }
