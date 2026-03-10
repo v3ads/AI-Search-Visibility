@@ -1,14 +1,59 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import { scrypt, timingSafeEqual } from "crypto";
 import { storage } from "./storage";
 import { seedDatabase } from "./seed";
 import { insertPromptSchema, insertBoostActionSchema, insertTagSchema } from "@shared/schema";
+
+const AUTH_USERNAME = "virta";
+const AUTH_PASSWORD_HASH = "437827299a07f71acbdae3cf2311403f:8c787d52511e60fd315f714dd0f312985c312cea153419a28addf9e346ecc95d1949e36a866d363bb1dd8e97011776d270964ed287d0618763bb645f3ed3efb2";
+
+function verifyPassword(password: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const [salt, hash] = AUTH_PASSWORD_HASH.split(":");
+    scrypt(password, salt, 64, (err, derivedKey) => {
+      if (err) return reject(err);
+      const keyBuffer = Buffer.from(hash, "hex");
+      resolve(timingSafeEqual(derivedKey, keyBuffer));
+    });
+  });
+}
+
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (req.session?.authenticated) return next();
+  res.status(401).json({ message: "Unauthorized" });
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   await seedDatabase();
+
+  app.post("/api/auth/login", async (req, res) => {
+    const { username, password } = req.body;
+    if (username === AUTH_USERNAME && await verifyPassword(password)) {
+      req.session.username = username;
+      req.session.authenticated = true;
+      return res.json({ ok: true, username });
+    }
+    res.status(401).json({ message: "Invalid username or password" });
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.json({ ok: true });
+    });
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    if (req.session?.authenticated) {
+      return res.json({ username: req.session.username });
+    }
+    res.status(401).json({ message: "Not authenticated" });
+  });
+
+  app.use("/api", requireAuth);
 
   app.get("/api/projects", async (_req, res) => {
     const allProjects = await storage.getProjects("demo");

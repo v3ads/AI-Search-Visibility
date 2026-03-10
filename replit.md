@@ -66,5 +66,13 @@ All routes prefixed with `/api`:
 - `PATCH /api/boost-actions/:id` - Update action status
 - `GET /api/projects/:id/citations` - Citation data
 
+## Authentication
+- Session-based auth using express-session with connect-pg-simple (PostgreSQL-backed sessions)
+- Single-user hardcoded credentials (username: "virta", password hash stored in routes.ts)
+- Auth endpoints: POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
+- All /api/* routes (except auth) require authentication via requireAuth middleware
+- Frontend shows login page when unauthenticated, redirects to dashboard on login
+- Session cookie lasts 30 days
+
 ## Demo Project
 Seeded with "AcmeCloud" (cloud hosting brand) as demo, tracking across 5 AI models with 30 days of metric data, 20 prompts, 8 competitors, 7 boost actions, and 12 citation sources.

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -8,7 +9,11 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PROJECT_ID } from "@/lib/constants";
+import { Button } from "@/components/ui/button";
+import { LogOut } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import NotFound from "@/pages/not-found";
+import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import Visibility from "@/pages/visibility";
 import ShareOfVoice from "@/pages/share-of-voice";
@@ -44,6 +49,45 @@ function Router() {
 }
 
 function App() {
+  const [user, setUser] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((res) => {
+        if (res.ok) return res.json();
+        throw new Error("Not authenticated");
+      })
+      .then((data) => setUser(data.username))
+      .catch(() => setUser(null))
+      .finally(() => setChecking(false));
+  }, []);
+
+  const handleLogout = async () => {
+    await apiRequest("POST", "/api/auth/logout");
+    setUser(null);
+    queryClient.clear();
+  };
+
+  if (checking) {
+    return (
+      <ThemeProvider>
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      </ThemeProvider>
+    );
+  }
+
+  if (!user) {
+    return (
+      <ThemeProvider>
+        <Login onLogin={(username) => setUser(username)} />
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
@@ -59,7 +103,19 @@ function App() {
               <div className="flex flex-col flex-1 min-w-0">
                 <header className="flex items-center justify-between gap-1 p-2 border-b h-12 shrink-0">
                   <SidebarTrigger data-testid="button-sidebar-toggle" />
-                  <ThemeToggle />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground" data-testid="text-username">{user}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleLogout}
+                      className="h-8 w-8"
+                      data-testid="button-logout"
+                    >
+                      <LogOut className="h-4 w-4" />
+                    </Button>
+                    <ThemeToggle />
+                  </div>
                 </header>
                 <main className="flex-1 overflow-auto">
                   <Router />
