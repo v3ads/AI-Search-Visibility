@@ -6,6 +6,7 @@ import { seedDatabase } from "./seed";
 import {
   insertPromptSchema, insertBoostActionSchema, insertTagSchema,
   insertCompetitorSchema, insertProjectSchema,
+  type Prompt,
 } from "@shared/schema";
 import { runAnalysis } from "./ai-analysis";
 
@@ -176,6 +177,34 @@ export async function registerRoutes(
   app.delete("/api/prompts/:id", async (req, res) => {
     await storage.deletePrompt(parseInt(req.params.id));
     res.json({ ok: true });
+  });
+
+  // Bulk import: POST /api/projects/:id/prompts/bulk
+  // Body: { lines: string[], intent: string, tagId?: number | null }
+  app.post("/api/projects/:id/prompts/bulk", async (req, res) => {
+    try {
+      const projectId = req.params.id;
+      const { lines, intent, tagId } = req.body as { lines: string[]; intent: string; tagId?: number | null };
+      if (!Array.isArray(lines) || lines.length === 0) {
+        return res.status(400).json({ message: "No prompts provided" });
+      }
+      const created: Prompt[] = [];
+      for (const text of lines) {
+        const trimmed = text.trim();
+        if (!trimmed) continue;
+        const p = await storage.createPrompt({
+          projectId,
+          text: trimmed,
+          intent: intent || "informational",
+          tagId: tagId ?? null,
+          isActive: true,
+        });
+        created.push(p);
+      }
+      res.json({ created: created.length, prompts: created });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
   });
 
   // ── Competitors ───────────────────────────────────────────────────────────
