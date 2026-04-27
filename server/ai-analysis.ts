@@ -1,13 +1,16 @@
 import { storage } from "./storage";
 import { log } from "./index";
 
-const ROUTELLM_BASE = "https://routellm.abacus.ai/v1/chat/completions";
+const OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions";
+
+// Fast, cheap model used for JSON extraction analysis
+const EXTRACTION_MODEL = "openai/gpt-4o-mini";
 
 const MODEL_MAP: Record<string, string> = {
-  "ChatGPT": "gpt-4o",
-  "Claude": "claude-sonnet-4-20250514",
-  "Google Gemini": "gemini-2.5-pro",
-  "Grok": "grok-3",
+  "ChatGPT": "openai/gpt-4o",
+  "Claude": "anthropic/claude-sonnet-4-5",
+  "Google Gemini": "google/gemini-2.5-pro",
+  "Grok": "x-ai/grok-3",
 };
 
 interface BrandAnalysis {
@@ -23,7 +26,7 @@ interface PromptAnalysisResult {
   allCitedUrls: { url: string; title: string }[];
 }
 
-async function callRouteLLM(
+async function callOpenRouter(
   modelId: string,
   messages: { role: string; content: string }[],
   maxTokens = 2048
@@ -31,12 +34,14 @@ async function callRouteLLM(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60000);
 
-  const res = await fetch(ROUTELLM_BASE, {
+  const res = await fetch(OPENROUTER_BASE, {
     signal: controller.signal,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.ROUTELLM_API_KEY}`,
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      "HTTP-Referer": process.env.APP_URL || "https://ai-search-visibility.vercel.app",
+      "X-Title": "AI Search Visibility",
     },
     body: JSON.stringify({
       model: modelId,
@@ -50,7 +55,7 @@ async function callRouteLLM(
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`RouteLLM ${modelId} error ${res.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`OpenRouter ${modelId} error ${res.status}: ${errText.slice(0, 200)}`);  
   }
 
   const data = await res.json();
@@ -101,7 +106,7 @@ Rules:
 - Include ALL tracked brands, even if not mentioned (mentioned=false, rank=0, sentimentScore=50)`;
 
   try {
-    const raw = await callRouteLLM("route-llm", [
+    const raw = await callOpenRouter(EXTRACTION_MODEL, [
       { role: "user", content: extractionPrompt },
     ], 1500);
 
@@ -163,7 +168,7 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
         try {
           log(`Querying ${displayName} for prompt: "${prompt.text.slice(0, 60)}..."`, "ai-analysis");
 
-          const aiResponse = await callRouteLLM(modelId, [
+          const aiResponse = await callOpenRouter(modelId, [
             { role: "user", content: prompt.text },
           ]);
 
