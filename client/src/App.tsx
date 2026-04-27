@@ -24,6 +24,7 @@ import Citations from "@/pages/citations";
 import Prompts from "@/pages/prompts";
 import BoostActions from "@/pages/boost-actions";
 import SettingsPage from "@/pages/settings";
+import ScanPage from "@/pages/scan";
 import { CreateProjectWizard } from "@/components/create-project-wizard";
 
 function Router() {
@@ -72,6 +73,7 @@ function Router() {
       <Route path="/projects/:id/brand-strength" component={BrandStrength} />
       <Route path="/projects/:id/sentiment" component={Sentiment} />
       <Route path="/projects/:id/citations" component={Citations} />
+      <Route path="/projects/:id/scan" component={ScanPage} />
       <Route path="/projects/:id/prompts" component={Prompts} />
       <Route path="/projects/:id/boost-actions" component={BoostActions} />
       <Route path="/projects/:id/settings" component={SettingsPage} />

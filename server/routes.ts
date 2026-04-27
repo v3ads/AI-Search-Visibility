@@ -9,6 +9,7 @@ import {
   type Prompt,
 } from "@shared/schema";
 import { runAnalysis } from "./ai-analysis";
+import { scanEmitter, type ScanEvent } from "./scan-events";
 
 const AUTH_USERNAME = "virta";
 const AUTH_PASSWORD_HASH = "437827299a07f71acbdae3cf2311403f:8c787d52511e60fd315f714dd0f312985c312cea153419a28addf9e346ecc95d1949e36a866d363bb1dd8e97011776d270964ed287d0618763bb645f3ed3efb2";
@@ -306,6 +307,38 @@ export async function registerRoutes(
     const run = await storage.getAnalysisRun(parseInt(req.params.id));
     if (!run) return res.status(404).json({ message: "Scan not found" });
     res.json(run);
+  });
+
+  // SSE endpoint: streams live scan progress events
+  app.get("/api/scans/:id/progress", (req, res) => {
+    const runId = parseInt(req.params.id);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    // Send a heartbeat every 15s to keep the connection alive
+    const heartbeat = setInterval(() => {
+      res.write("event: heartbeat\ndata: {}\n\n");
+    }, 15000);
+
+    const listener = (event: ScanEvent) => {
+      if (event.runId !== runId) return;
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      if (event.type === "complete" || event.type === "failed") {
+        cleanup();
+      }
+    };
+
+    const cleanup = () => {
+      clearInterval(heartbeat);
+      scanEmitter.off("scan", listener);
+      res.end();
+    };
+
+    scanEmitter.on("scan", listener);
+    req.on("close", cleanup);
   });
 
   return httpServer;

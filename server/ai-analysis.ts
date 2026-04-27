@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { log } from "./index";
+import { emitScanEvent } from "./scan-events";
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -55,7 +56,7 @@ async function callOpenRouter(
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`OpenRouter ${modelId} error ${res.status}: ${errText.slice(0, 200)}`);  
+    throw new Error(`OpenRouter ${modelId} error ${res.status}: ${errText.slice(0, 200)}`);
   }
 
   const data = await res.json();
@@ -154,6 +155,17 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
     });
   }
 
+  const total = activePrompts.length * models.length;
+
+  // Emit start event
+  emitScanEvent(run.id, {
+    type: "start",
+    runId: run.id,
+    totalPrompts: activePrompts.length,
+    totalModels: models.length,
+    models,
+  });
+
   const today = new Date().toISOString().split("T")[0];
   let completed = 0;
 
@@ -165,6 +177,17 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
   try {
     for (const prompt of activePrompts) {
       for (const [displayName, modelId] of Object.entries(MODEL_MAP)) {
+        // Emit "running" event before calling the model
+        emitScanEvent(run.id, {
+          type: "progress",
+          runId: run.id,
+          completed,
+          total,
+          model: displayName,
+          promptText: prompt.text.slice(0, 80),
+          status: "running",
+        });
+
         try {
           log(`Querying ${displayName} for prompt: "${prompt.text.slice(0, 60)}..."`, "ai-analysis");
 
@@ -214,10 +237,32 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
 
           completed++;
           await storage.updateAnalysisRun(run.id, { completedPrompts: completed });
+
+          // Emit "done" event after successful model call
+          emitScanEvent(run.id, {
+            type: "progress",
+            runId: run.id,
+            completed,
+            total,
+            model: displayName,
+            promptText: prompt.text.slice(0, 80),
+            status: "done",
+          });
         } catch (err: any) {
           log(`Error with ${displayName} on prompt ${prompt.id}: ${err.message}`, "ai-analysis");
           completed++;
           await storage.updateAnalysisRun(run.id, { completedPrompts: completed });
+
+          // Emit "error" event on failure
+          emitScanEvent(run.id, {
+            type: "progress",
+            runId: run.id,
+            completed,
+            total,
+            model: displayName,
+            promptText: prompt.text.slice(0, 80),
+            status: "error",
+          });
         }
       }
     }
@@ -266,6 +311,12 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
       completedAt: new Date(),
     });
 
+    emitScanEvent(run.id, {
+      type: "complete",
+      runId: run.id,
+      completedPrompts: completed,
+    });
+
     log(`Analysis run ${run.id} completed: ${completed} prompt-model combinations processed`, "ai-analysis");
     return run.id;
   } catch (err: any) {
@@ -274,6 +325,13 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
       error: err.message,
       completedAt: new Date(),
     });
+
+    emitScanEvent(run.id, {
+      type: "failed",
+      runId: run.id,
+      error: err.message,
+    });
+
     throw err;
   }
 }

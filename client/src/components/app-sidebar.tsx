@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Eye, PieChart, Trophy, Shield, SmilePlus,
-  Link2, FileText, Rocket, Settings, Zap, ChevronsUpDown, Plus, Check,
+  Link2, FileText, Rocket, Settings, Zap, ChevronsUpDown, Plus, Check, Radar,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel,
@@ -35,6 +35,7 @@ export function AppSidebar() {
   ];
 
   const configItems = [
+    { title: "Scan", url: `${base}/scan`, icon: Radar },
     { title: "Prompts", url: `${base}/prompts`, icon: FileText },
     { title: "Boost Actions", url: `${base}/boost-actions`, icon: Rocket },
     { title: "Settings", url: `${base}/settings`, icon: Settings },
