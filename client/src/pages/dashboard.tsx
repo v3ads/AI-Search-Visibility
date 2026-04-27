@@ -5,7 +5,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MetricCard, ScoreGauge } from "@/components/metric-card";
 import { useMetrics, useProject, useAnalysisRuns } from "@/hooks/use-project-data";
 import { Eye, PieChart, Trophy, SmilePlus, Radar, Loader2, CheckCircle2, XCircle } from "lucide-react";
-import { MODEL_COLORS, PROJECT_ID } from "@/lib/constants";
+import { MODEL_COLORS } from "@/lib/constants";
+import { useProjectContext } from "@/lib/project-context";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -46,6 +47,7 @@ function ScanButton() {
   const [scanning, setScanning] = useState(false);
   const [pollId, setPollId] = useState<number | null>(null);
   const { toast } = useToast();
+  const { activeProjectId } = useProjectContext();
 
   useEffect(() => {
     if (!pollId) return;
@@ -70,9 +72,9 @@ function ScanButton() {
           setScanning(false);
           setPollId(null);
           toast({ title: "Scan Complete", description: `Analyzed ${run.completedPrompts} prompt-model combinations.` });
-          queryClient.invalidateQueries({ queryKey: ["/api/projects", PROJECT_ID, "metrics"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/projects", PROJECT_ID, "citations"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/projects", PROJECT_ID, "scans"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/projects", activeProjectId, "metrics"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/projects", activeProjectId, "citations"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/projects", activeProjectId, "scans"] });
         } else if (run.status === "failed") {
           clearInterval(interval);
           setScanning(false);
@@ -95,7 +97,7 @@ function ScanButton() {
   const handleScan = async () => {
     setScanning(true);
     try {
-      const res = await apiRequest("POST", `/api/projects/${PROJECT_ID}/scan`);
+      const res = await apiRequest("POST", `/api/projects/${activeProjectId}/scan`);
       const data = await res.json();
       setPollId(data.runId);
       toast({ title: "Scan Started", description: "Querying AI models with your prompts. This may take a few minutes." });

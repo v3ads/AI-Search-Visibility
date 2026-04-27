@@ -16,6 +16,8 @@ export interface IStorage {
   getProjects(userId: string): Promise<Project[]>;
   getProject(id: string): Promise<Project | undefined>;
   createProject(project: InsertProject): Promise<Project>;
+  updateProject(id: string, data: Partial<InsertProject>): Promise<Project>;
+  deleteProject(id: string): Promise<void>;
   getTags(projectId: string): Promise<Tag[]>;
   createTag(tag: InsertTag): Promise<Tag>;
   deleteTag(id: number): Promise<void>;
@@ -25,6 +27,7 @@ export interface IStorage {
   deletePrompt(id: number): Promise<void>;
   getCompetitors(projectId: string): Promise<Competitor[]>;
   createCompetitor(comp: InsertCompetitor): Promise<Competitor>;
+  deleteCompetitor(id: number): Promise<void>;
   getDailyMetrics(projectId: string): Promise<DailyMetric[]>;
   createDailyMetric(metric: InsertDailyMetric): Promise<DailyMetric>;
   getBoostActions(projectId: string): Promise<BoostAction[]>;
@@ -69,6 +72,23 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async updateProject(id: string, data: Partial<InsertProject>): Promise<Project> {
+    const [updated] = await db.update(projects).set(data).where(eq(projects.id, id)).returning();
+    return updated;
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    // Cascade delete all related data
+    await db.delete(analysisRuns).where(eq(analysisRuns.projectId, id));
+    await db.delete(dailyMetrics).where(eq(dailyMetrics.projectId, id));
+    await db.delete(citations).where(eq(citations.projectId, id));
+    await db.delete(boostActions).where(eq(boostActions.projectId, id));
+    await db.delete(prompts).where(eq(prompts.projectId, id));
+    await db.delete(tags).where(eq(tags.projectId, id));
+    await db.delete(competitors).where(eq(competitors.projectId, id));
+    await db.delete(projects).where(eq(projects.id, id));
+  }
+
   async getTags(projectId: string): Promise<Tag[]> {
     return db.select().from(tags).where(eq(tags.projectId, projectId));
   }
@@ -107,6 +127,10 @@ export class DatabaseStorage implements IStorage {
   async createCompetitor(comp: InsertCompetitor): Promise<Competitor> {
     const [created] = await db.insert(competitors).values(comp).returning();
     return created;
+  }
+
+  async deleteCompetitor(id: number): Promise<void> {
+    await db.delete(competitors).where(eq(competitors.id, id));
   }
 
   async getDailyMetrics(projectId: string): Promise<DailyMetric[]> {

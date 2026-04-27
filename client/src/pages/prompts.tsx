@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { usePrompts, useTags } from "@/hooks/use-project-data";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { PROJECT_ID, INTENTS, INTENT_COLORS } from "@/lib/constants";
+import { INTENTS, INTENT_COLORS } from "@/lib/constants";
+import { useProjectContext } from "@/lib/project-context";
 import { Plus, Trash2, Search } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 
@@ -17,6 +18,7 @@ export default function Prompts() {
   const { data: promptList, isLoading: promptsLoading } = usePrompts();
   const { data: tagList, isLoading: tagsLoading } = useTags();
   const { toast } = useToast();
+  const { activeProjectId } = useProjectContext();
   const [search, setSearch] = useState("");
   const [filterIntent, setFilterIntent] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -26,7 +28,7 @@ export default function Prompts() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", `/api/projects/${PROJECT_ID}/prompts`, {
+      await apiRequest("POST", `/api/projects/${activeProjectId}/prompts`, {
         text: newText,
         intent: newIntent,
         tagId: newTagId ? parseInt(newTagId) : null,
@@ -34,7 +36,7 @@ export default function Prompts() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", PROJECT_ID, "prompts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", activeProjectId, "prompts"] });
       setDialogOpen(false);
       setNewText("");
       toast({ title: "Prompt created" });
@@ -49,7 +51,7 @@ export default function Prompts() {
       await apiRequest("DELETE", `/api/prompts/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", PROJECT_ID, "prompts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", activeProjectId, "prompts"] });
       toast({ title: "Prompt deleted" });
     },
   });

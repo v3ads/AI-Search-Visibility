@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useBoostActions } from "@/hooks/use-project-data";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { PROJECT_ID, PRIORITY_COLORS } from "@/lib/constants";
+import { PRIORITY_COLORS } from "@/lib/constants";
+import { useProjectContext } from "@/lib/project-context";
 import { Rocket, ArrowRight, CheckCircle2, Clock, Circle } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 
@@ -27,13 +28,14 @@ const CATEGORY_ICONS: Record<string, string> = {
 export default function BoostActions() {
   const { data: actions, isLoading } = useBoostActions();
   const { toast } = useToast();
+  const { activeProjectId } = useProjectContext();
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
       await apiRequest("PATCH", `/api/boost-actions/${id}`, { status });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", PROJECT_ID, "boost-actions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", activeProjectId, "boost-actions"] });
       toast({ title: "Status updated" });
     },
   });

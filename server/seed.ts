@@ -2,19 +2,33 @@ import { db } from "./db";
 import { projects, tags, prompts, competitors, dailyMetrics, boostActions, citations, users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
+const DEMO_PROJECT_ID = "demo_project_001";
+const VIRTA_USERNAME = "virta";
+
 export async function seedDatabase() {
-  const existingProjects = await db.select().from(projects);
-  if (existingProjects.length > 0) return;
+  // Ensure the virta user exists in the DB (auth uses hardcoded hash in routes.ts)
+  let [virtaUser] = await db.select().from(users).where(eq(users.username, VIRTA_USERNAME));
+  if (!virtaUser) {
+    [virtaUser] = await db.insert(users).values({
+      username: VIRTA_USERNAME,
+      password: "placeholder",
+    }).returning();
+  }
 
-  const [user] = await db.insert(users).values({
-    username: "demo",
-    password: "demo123",
-  }).returning();
+  // Check if demo project already exists
+  const [existingProject] = await db.select().from(projects).where(eq(projects.id, DEMO_PROJECT_ID));
+  if (existingProject) {
+    // Re-assign to virta if it was owned by a legacy demo user
+    if (existingProject.userId !== virtaUser.id) {
+      await db.update(projects).set({ userId: virtaUser.id }).where(eq(projects.id, DEMO_PROJECT_ID));
+    }
+    return;
+  }
 
-  const projectId = "demo_project_001";
+  const projectId = DEMO_PROJECT_ID;
   await db.insert(projects).values({
     id: projectId,
-    userId: user.id,
+    userId: virtaUser.id,
     domain: "acmecloud.io",
     brandName: "AcmeCloud",
     industry: "Cloud Infrastructure & SaaS",
