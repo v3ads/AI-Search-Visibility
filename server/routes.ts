@@ -338,7 +338,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/org/members/:userId", requireOrgAdmin, async (req, res) => {
     try {
       const { role } = req.body;
-      await storage.updateOrgMemberRole(req.session.orgId!, parseInt(req.params.userId as string), role);
+      await storage.updateOrgMemberRole(req.session.orgId!, req.params.userId, role);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -347,7 +347,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/org/members/:userId", requireOrgAdmin, async (req, res) => {
     try {
-      const userId = parseInt(req.params.userId as string);
+      const userId = req.params.userId;
       if (userId === req.session.userId) {
         return res.status(400).json({ message: "You cannot remove yourself" });
       }

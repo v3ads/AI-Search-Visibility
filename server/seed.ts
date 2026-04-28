@@ -68,7 +68,7 @@ export async function seedDatabase() {
     }).returning();
     console.log("[seed] Created demo org");
   }
-  for (const [uid, role] of [[adminUser.id, "owner"], [demoUser.id, "owner"]] as [number, string][]) {
+  for (const [uid, role] of [[adminUser.id, "owner"], [demoUser.id, "owner"]] as [string, string][]) {
     const [m] = await db.select().from(orgMembers).where(
       and(eq(orgMembers.orgId, DEMO_ORG_ID), eq(orgMembers.userId, uid))
     );

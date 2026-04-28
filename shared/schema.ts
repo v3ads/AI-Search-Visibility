@@ -1,10 +1,11 @@
 import { pgTable, text, integer, boolean, timestamp, serial, varchar, real, date } from "drizzle-orm/pg-core";
+import { randomUUID } from "crypto";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
+  id: varchar("id").primaryKey().$defaultFn(() => randomUUID()),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name"),
@@ -44,7 +45,7 @@ export const organizations = pgTable("organizations", {
 export const orgMembers = pgTable("org_members", {
   id: serial("id").primaryKey(),
   orgId: varchar("org_id").notNull(),
-  userId: integer("user_id").notNull(),
+  userId: text("user_id").notNull(),
   role: text("role").notNull().default("member"), // owner | admin | member
   joinedAt: timestamp("joined_at").defaultNow(),
 });
@@ -56,7 +57,7 @@ export const invitations = pgTable("invitations", {
   email: text("email").notNull(),
   role: text("role").notNull().default("member"),
   token: text("token").notNull().unique(),
-  invitedBy: integer("invited_by").notNull(),
+  invitedBy: text("invited_by").notNull(),
   acceptedAt: timestamp("accepted_at"),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -65,7 +66,7 @@ export const invitations = pgTable("invitations", {
 // ── Password Reset Tokens ─────────────────────────────────────────────────────
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
+  userId: text("user_id").notNull(),
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
@@ -80,7 +81,7 @@ export const apiKeys = pgTable("api_keys", {
   keyHash: text("key_hash").notNull().unique(),
   keyPrefix: text("key_prefix").notNull(),
   lastUsedAt: timestamp("last_used_at"),
-  createdBy: integer("created_by").notNull(),
+  createdBy: text("created_by").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

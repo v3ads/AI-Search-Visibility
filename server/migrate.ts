@@ -42,6 +42,21 @@ async function migrate() {
     const userCols = await getTableColumns(pool, 'users');
     console.log("Current users columns:", userCols.join(", "));
 
+    // Ensure users.id has a DEFAULT (UUID) so new inserts auto-generate IDs
+    const { rows: idDefaultRows } = await pool.query(`
+      SELECT column_default FROM information_schema.columns
+      WHERE table_name = 'users' AND column_name = 'id' AND table_schema = 'public'
+    `);
+    const idDefault = idDefaultRows[0]?.column_default;
+    if (!idDefault) {
+      // Enable uuid-ossp extension if not already enabled
+      await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+      await pool.query(`ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid()::text`);
+      console.log("✓ Added DEFAULT gen_random_uuid() to users.id");
+    } else {
+      console.log("✓ users.id already has a default:", idDefault);
+    }
+
     // Add new columns
     await addColumnIfMissing(pool, 'users', 'email', 'TEXT');
     await addColumnIfMissing(pool, 'users', 'password_hash', 'TEXT');
@@ -193,8 +208,8 @@ async function migrate() {
       await pool.query(`
         CREATE TABLE org_members (
           id SERIAL PRIMARY KEY,
-          org_id VARCHAR NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          org_id VARCHAR NOT NULL,
+          user_id TEXT NOT NULL,
           role TEXT NOT NULL DEFAULT 'member',
           joined_at TIMESTAMP NOT NULL DEFAULT NOW(),
           UNIQUE(org_id, user_id)
@@ -215,11 +230,11 @@ async function migrate() {
       await pool.query(`
         CREATE TABLE invitations (
           id SERIAL PRIMARY KEY,
-          org_id VARCHAR NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          org_id VARCHAR NOT NULL,
           email TEXT NOT NULL,
           role TEXT NOT NULL DEFAULT 'member',
           token TEXT NOT NULL UNIQUE,
-          invited_by INTEGER NOT NULL REFERENCES users(id),
+          invited_by TEXT NOT NULL,
           accepted_at TIMESTAMP,
           expires_at TIMESTAMP NOT NULL,
           created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -241,7 +256,7 @@ async function migrate() {
       await pool.query(`
         CREATE TABLE password_reset_tokens (
           id SERIAL PRIMARY KEY,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL,
           token TEXT NOT NULL UNIQUE,
           expires_at TIMESTAMP NOT NULL,
           used_at TIMESTAMP,
@@ -263,12 +278,12 @@ async function migrate() {
       await pool.query(`
         CREATE TABLE api_keys (
           id SERIAL PRIMARY KEY,
-          org_id VARCHAR NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          org_id VARCHAR NOT NULL,
           name TEXT NOT NULL,
           key_hash TEXT NOT NULL UNIQUE,
           key_prefix TEXT NOT NULL,
           last_used_at TIMESTAMP,
-          created_by INTEGER NOT NULL REFERENCES users(id),
+          created_by TEXT NOT NULL,
           created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );
       `);
@@ -292,7 +307,7 @@ async function migrate() {
       await pool.query(`ALTER TABLE projects RENAME COLUMN "orgId" TO org_id`);
       console.log("✓ Renamed projects.orgId -> org_id");
     } else if (!projCols.includes('org_id')) {
-      await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id VARCHAR REFERENCES organizations(id) ON DELETE CASCADE`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id VARCHAR`);
       console.log("✓ Added projects.org_id column");
     }
 

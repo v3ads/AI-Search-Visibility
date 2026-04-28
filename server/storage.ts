@@ -20,7 +20,7 @@ export async function createUser(data: InsertUser): Promise<User> {
   return user;
 }
 
-export async function getUserById(id: number): Promise<User | undefined> {
+export async function getUserById(id: string): Promise<User | undefined> {
   const [user] = await db.select().from(users).where(eq(users.id, id));
   return user;
 }
@@ -30,7 +30,7 @@ export async function getUserByEmail(email: string): Promise<User | undefined> {
   return user;
 }
 
-export async function updateUser(id: number, data: Partial<User>): Promise<User> {
+export async function updateUser(id: string, data: Partial<User>): Promise<User> {
   const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
   return user;
 }
@@ -57,7 +57,7 @@ export async function updateOrg(id: string, data: Partial<Organization>): Promis
   return org;
 }
 
-export async function getOrgsForUser(userId: number): Promise<(Organization & { role: string })[]> {
+export async function getOrgsForUser(userId: string): Promise<(Organization & { role: string })[]> {
   const rows = await db
     .select({ org: organizations, role: orgMembers.role })
     .from(orgMembers)
@@ -66,7 +66,7 @@ export async function getOrgsForUser(userId: number): Promise<(Organization & { 
   return rows.map((r) => ({ ...r.org, role: r.role }));
 }
 
-export async function addOrgMember(orgId: string, userId: number, role: string): Promise<OrgMember> {
+export async function addOrgMember(orgId: string, userId: string, role: string): Promise<OrgMember> {
   const [member] = await db.insert(orgMembers).values({ orgId, userId, role }).returning();
   return member;
 }
@@ -80,7 +80,7 @@ export async function getOrgMembers(orgId: string): Promise<(OrgMember & { user:
   return rows.map((r) => ({ ...r.member, user: r.user }));
 }
 
-export async function getOrgMember(orgId: string, userId: number): Promise<OrgMember | undefined> {
+export async function getOrgMember(orgId: string, userId: string): Promise<OrgMember | undefined> {
   const [member] = await db
     .select()
     .from(orgMembers)
@@ -88,13 +88,13 @@ export async function getOrgMember(orgId: string, userId: number): Promise<OrgMe
   return member;
 }
 
-export async function removeOrgMember(orgId: string, userId: number): Promise<void> {
+export async function removeOrgMember(orgId: string, userId: string): Promise<void> {
   await db.delete(orgMembers).where(
     and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId))
   );
 }
 
-export async function updateOrgMemberRole(orgId: string, userId: number, role: string): Promise<void> {
+export async function updateOrgMemberRole(orgId: string, userId: string, role: string): Promise<void> {
   await db.update(orgMembers).set({ role }).where(
     and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId))
   );
@@ -104,7 +104,7 @@ export async function updateOrgMemberRole(orgId: string, userId: number, role: s
 
 export async function createInvitation(data: {
   orgId: string; email: string; role: string; token: string;
-  invitedBy: number; expiresAt: Date;
+  invitedBy: string; expiresAt: Date;
 }): Promise<Invitation> {
   const [inv] = await db.insert(invitations).values(data).returning();
   return inv;
@@ -131,7 +131,7 @@ export async function deleteInvitation(id: number): Promise<void> {
 
 // ── Password Reset ────────────────────────────────────────────────────────────
 
-export async function createPasswordResetToken(userId: number, token: string, expiresAt: Date): Promise<void> {
+export async function createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
   await db.insert(passwordResetTokens).values({ userId, token, expiresAt });
 }
 
@@ -147,7 +147,7 @@ export async function markPasswordResetTokenUsed(token: string): Promise<void> {
 // ── API Keys ──────────────────────────────────────────────────────────────────
 
 export async function createApiKey(data: {
-  orgId: string; name: string; keyHash: string; keyPrefix: string; createdBy: number;
+  orgId: string; name: string; keyHash: string; keyPrefix: string; createdBy: string;
 }): Promise<ApiKey> {
   const [key] = await db.insert(apiKeys).values(data).returning();
   return key;
