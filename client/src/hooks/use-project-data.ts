@@ -47,11 +47,12 @@ export function useCompetitors() {
   });
 }
 
-export function useMetrics() {
+export function useMetrics(days?: number) {
   const id = useCurrentProjectId();
+  const url = days ? `/api/projects/${id}/metrics?days=${days}` : `/api/projects/${id}/metrics`;
   return useQuery<DailyMetric[]>({
-    queryKey: ["/api/projects", id, "metrics"],
-    queryFn: () => apiRequest("GET", `/api/projects/${id}/metrics`).then((r) => r.json()),
+    queryKey: days ? ["/api/projects", id, "metrics", days] : ["/api/projects", id, "metrics"],
+    queryFn: () => apiRequest("GET", url).then((r) => r.json()),
     enabled: !!id,
   });
 }

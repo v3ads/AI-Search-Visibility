@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, projects, tags, prompts, competitors, dailyMetrics, boostActions, citations, analysisRuns,
@@ -28,7 +28,7 @@ export interface IStorage {
   getCompetitors(projectId: string): Promise<Competitor[]>;
   createCompetitor(comp: InsertCompetitor): Promise<Competitor>;
   deleteCompetitor(id: number): Promise<void>;
-  getDailyMetrics(projectId: string): Promise<DailyMetric[]>;
+  getDailyMetrics(projectId: string, days?: number): Promise<DailyMetric[]>;
   createDailyMetric(metric: InsertDailyMetric): Promise<DailyMetric>;
   getBoostActions(projectId: string): Promise<BoostAction[]>;
   createBoostAction(action: InsertBoostAction): Promise<BoostAction>;
@@ -133,8 +133,15 @@ export class DatabaseStorage implements IStorage {
     await db.delete(competitors).where(eq(competitors.id, id));
   }
 
-  async getDailyMetrics(projectId: string): Promise<DailyMetric[]> {
-    return db.select().from(dailyMetrics).where(eq(dailyMetrics.projectId, projectId)).orderBy(dailyMetrics.date);
+  async getDailyMetrics(projectId: string, days = 90): Promise<DailyMetric[]> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    return db
+      .select()
+      .from(dailyMetrics)
+      .where(and(eq(dailyMetrics.projectId, projectId), gte(dailyMetrics.date, cutoffStr)))
+      .orderBy(dailyMetrics.date);
   }
 
   async createDailyMetric(metric: InsertDailyMetric): Promise<DailyMetric> {

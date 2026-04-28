@@ -233,7 +233,8 @@ export async function registerRoutes(
   // ── Metrics ───────────────────────────────────────────────────────────────
 
   app.get("/api/projects/:id/metrics", async (req, res) => {
-    const m = await storage.getDailyMetrics(req.params.id);
+    const days = parseInt(req.query.days as string) || 90;
+    const m = await storage.getDailyMetrics(req.params.id, days);
     res.json(m);
   });
 

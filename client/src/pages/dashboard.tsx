@@ -11,6 +11,8 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { DailyMetric, AnalysisRun } from "@shared/schema";
+import { DATE_RANGE_OPTIONS } from "@/hooks/use-analytics";
+type DateRange = 7 | 14 | 30 | 60 | 90;
 
 function getLatestMetrics(metrics: DailyMetric[], brandName: string) {
   const latest = metrics.filter((m) => m.brandName === brandName);
@@ -301,8 +303,9 @@ function BrandStrengthChart({ metrics, brandName }: { metrics: DailyMetric[]; br
 }
 
 export default function Dashboard() {
+  const [days, setDays] = useState<DateRange>(30);
   const { data: project, isLoading: projectLoading } = useProject();
-  const { data: metrics, isLoading: metricsLoading } = useMetrics();
+  const { data: metrics, isLoading: metricsLoading } = useMetrics(days);
   const { data: scans } = useAnalysisRuns();
 
   if (projectLoading || metricsLoading) {
@@ -331,7 +334,14 @@ export default function Dashboard() {
             Monitoring <span className="text-foreground font-medium">{project.brandName}</span> across {modelCount} AI model{modelCount !== 1 ? "s" : ""}
           </p>
         </div>
-        <ScanButton />
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1">
+            {DATE_RANGE_OPTIONS.map((opt) => (
+              <Button key={opt.value} variant={days === opt.value ? "default" : "ghost"} size="sm" className="h-7 text-xs px-2" onClick={() => setDays(opt.value as DateRange)}>{opt.label}</Button>
+            ))}
+          </div>
+          <ScanButton />
+        </div>
       </div>
 
       {latest ? (
