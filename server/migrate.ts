@@ -120,20 +120,37 @@ async function migrate() {
 
     // Add unique constraint on email if not exists
     const { rows: emailConstraints } = await pool.query(`
-      SELECT constraint_name FROM information_schema.table_constraints tc
-      JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
-      WHERE tc.table_name = 'users' AND ccu.column_name = 'email' AND tc.constraint_type = 'UNIQUE'
+      SELECT tc.constraint_name 
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.constraint_column_usage ccu 
+        ON tc.constraint_name = ccu.constraint_name 
+        AND tc.table_schema = ccu.table_schema
+      WHERE tc.table_name = 'users' 
+        AND tc.table_schema = 'public'
+        AND ccu.column_name = 'email' 
+        AND tc.constraint_type = 'UNIQUE'
     `);
     if (emailConstraints.length === 0) {
-      // First ensure no duplicate emails
+      // First ensure no duplicate emails by deduplicating
       await pool.query(`
-        UPDATE users u1 SET email = email || '_' || id::text
+        UPDATE users SET email = email || '_dup_' || id::text
         WHERE id NOT IN (
-          SELECT MIN(id) FROM users GROUP BY email
+          SELECT MIN(id) FROM users GROUP BY lower(email)
         )
       `);
-      await pool.query(`ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email)`);
-      console.log("✓ Added unique constraint on users.email");
+      // Try to add unique constraint, ignore if already exists
+      try {
+        await pool.query(`ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email)`);
+        console.log("✓ Added unique constraint on users.email");
+      } catch (e: any) {
+        if (e.code === '42P07') {
+          console.log("✓ Unique constraint on users.email already exists");
+        } else {
+          throw e;
+        }
+      }
+    } else {
+      console.log("✓ Unique constraint on users.email already exists");
     }
 
     // ── 2. Create organizations table ──────────────────────────────────────
