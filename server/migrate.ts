@@ -315,6 +315,27 @@ async function migrate() {
     await renameColumnIfExists(pool, 'projects', 'brandName', 'brand_name');
     await renameColumnIfExists(pool, 'projects', 'createdAt', 'created_at');
 
+    // Make projects.user_id nullable (old schema had user_id NOT NULL, new schema uses org_id)
+    const projColsFinal = await getTableColumns(pool, 'projects');
+    if (projColsFinal.includes('user_id')) {
+      try {
+        await pool.query(`ALTER TABLE projects ALTER COLUMN user_id DROP NOT NULL`);
+        console.log("✓ Made projects.user_id nullable (legacy column)");
+      } catch (e) {
+        // Already nullable, ignore
+      }
+    }
+    // Also make projects.plan nullable if it exists (old schema had it)
+    if (projColsFinal.includes('plan')) {
+      try {
+        await pool.query(`ALTER TABLE projects ALTER COLUMN plan DROP NOT NULL`);
+        console.log("✓ Made projects.plan nullable (legacy column)");
+      } catch (e) {
+        // Already nullable, ignore
+      }
+    }
+    console.log("✓ projects table ready");
+
     // ── 8. Create scan_schedules table ─────────────────────────────────────
     const ssCols = await getTableColumns(pool, 'scan_schedules');
     if (ssCols.length === 0) {
