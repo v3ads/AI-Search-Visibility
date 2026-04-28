@@ -64,6 +64,31 @@ async function migrate() {
     await pool.query(`UPDATE users SET email = 'user' || id::text || '@placeholder.local' WHERE email IS NULL`);
     await pool.query(`UPDATE users SET password_hash = '' WHERE password_hash IS NULL`);
 
+    // Drop old columns that are no longer needed (or make them nullable)
+    const userColsFinal = await getTableColumns(pool, 'users');
+    if (userColsFinal.includes('username')) {
+      // Make username nullable so new inserts don't fail
+      await pool.query(`ALTER TABLE users ALTER COLUMN username DROP NOT NULL`);
+      console.log("✓ Made users.username nullable (legacy column)");
+    }
+    if (userColsFinal.includes('password')) {
+      // Make password nullable so new inserts don't fail  
+      await pool.query(`ALTER TABLE users ALTER COLUMN password DROP NOT NULL`);
+      console.log("✓ Made users.password nullable (legacy column)");
+    }
+    // Also remove old role/emailVerified/avatarUrl/lastLoginAt/updatedAt camelCase columns if they exist
+    // (these were added by the previous migration with camelCase names)
+    for (const oldCol of ['role', 'emailVerified', 'avatarUrl', 'lastLoginAt', 'updatedAt']) {
+      if (userColsFinal.includes(oldCol)) {
+        // These are duplicates of the snake_case versions - make them nullable
+        try {
+          await pool.query(`ALTER TABLE users ALTER COLUMN "${oldCol}" DROP NOT NULL`);
+        } catch (e) {
+          // Ignore if already nullable
+        }
+      }
+    }
+
     // Make NOT NULL
     const userColsCheck = await getTableColumns(pool, 'users');
     if (userColsCheck.includes('email')) {
