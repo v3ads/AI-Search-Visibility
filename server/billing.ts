@@ -8,11 +8,27 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-04-22.dahlia",
 });
 
-// Stripe Price IDs — set these as env vars after creating products in Stripe dashboard
-export const STRIPE_PRICE_IDS: Record<string, string> = {
-  starter: process.env.STRIPE_PRICE_STARTER || "",
-  growth:  process.env.STRIPE_PRICE_GROWTH  || "",
-  agency:  process.env.STRIPE_PRICE_AGENCY  || "",
+// Stripe Price IDs — created via setup_stripe.py on 2026-04-28
+export const STRIPE_PRICE_IDS: Record<string, { monthly: string; yearly: string }> = {
+  starter: {
+    monthly: "price_1TRCOIBN7gC36D1gqENKjmN9",
+    yearly:  "price_1TRCOJBN7gC36D1g6BaX5P7p",
+  },
+  growth: {
+    monthly: "price_1TRCOJBN7gC36D1gx101Byq6",
+    yearly:  "price_1TRCOKBN7gC36D1gd3fr6LmK",
+  },
+  agency: {
+    monthly: "price_1TRCOLBN7gC36D1gjZNcrhRS",
+    yearly:  "price_1TRCOLBN7gC36D1gv4N25LuS",
+  },
+};
+
+export const PLAN_PRICING = {
+  free:    { monthly: 0,   yearly: 0 },
+  starter: { monthly: 49,  yearly: 470 },
+  growth:  { monthly: 149, yearly: 1430 },
+  agency:  { monthly: 399, yearly: 3830 },
 };
 
 export async function createStripeCustomer(email: string, name: string): Promise<string> {
@@ -23,12 +39,14 @@ export async function createStripeCustomer(email: string, name: string): Promise
 export async function createCheckoutSession(
   orgId: string,
   plan: string,
+  billing: "monthly" | "yearly",
   customerId: string,
   successUrl: string,
   cancelUrl: string
 ): Promise<string> {
-  const priceId = STRIPE_PRICE_IDS[plan];
-  if (!priceId) throw new Error(`No price ID configured for plan: ${plan}`);
+  const planPrices = STRIPE_PRICE_IDS[plan];
+  if (!planPrices) throw new Error(`No price IDs configured for plan: ${plan}`);
+  const priceId = planPrices[billing];
 
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
@@ -37,9 +55,9 @@ export async function createCheckoutSession(
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: successUrl,
     cancel_url: cancelUrl,
-    metadata: { orgId, plan },
+    metadata: { orgId, plan, billing },
     subscription_data: {
-      metadata: { orgId, plan },
+      metadata: { orgId, plan, billing },
     },
     allow_promotion_codes: true,
   });

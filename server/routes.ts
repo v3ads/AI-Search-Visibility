@@ -443,10 +443,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await storage.updateOrg(org.id, { stripeCustomerId: customerId });
       }
 
-      const priceId = process.env[`STRIPE_PRICE_${plan.toUpperCase()}`];
-      if (!priceId) return res.status(400).json({ message: `Stripe price ID for ${plan} not configured` });
+      const STRIPE_PRICES: Record<string, { monthly: string; yearly: string }> = {
+        starter: { monthly: "price_1TRCOIBN7gC36D1gqENKjmN9", yearly: "price_1TRCOJBN7gC36D1g6BaX5P7p" },
+        growth:  { monthly: "price_1TRCOJBN7gC36D1gx101Byq6", yearly: "price_1TRCOKBN7gC36D1gd3fr6LmK" },
+        agency:  { monthly: "price_1TRCOLBN7gC36D1gjZNcrhRS", yearly: "price_1TRCOLBN7gC36D1gv4N25LuS" },
+      };
+      const billingCycle: "monthly" | "yearly" = req.body.billing === "yearly" ? "yearly" : "monthly";
+      const priceId = STRIPE_PRICES[plan]?.[billingCycle];
+      if (!priceId) return res.status(400).json({ message: `No price configured for ${plan}/${billingCycle}` });
 
-      const appUrl = process.env.APP_URL || "https://plumboost.com";
+      const appUrl = process.env.APP_URL ? `https://${process.env.APP_URL}` : "https://plumboost.com";
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         mode: "subscription",
@@ -454,8 +460,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${appUrl}/billing`,
-        metadata: { orgId: org.id, plan },
-        subscription_data: { metadata: { orgId: org.id, plan } },
+        metadata: { orgId: org.id, plan, billing: billingCycle },
+        subscription_data: { metadata: { orgId: org.id, plan, billing: billingCycle } },
+        allow_promotion_codes: true,
       });
       res.json({ url: session.url });
     } catch (err: any) {
@@ -468,7 +475,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!stripe) return res.status(503).json({ message: "Billing not configured" });
       const org = await storage.getOrgById(req.session.orgId!);
       if (!org?.stripeCustomerId) return res.status(400).json({ message: "No billing account found" });
-      const appUrl = process.env.APP_URL || "https://plumboost.com";
+      const appUrl = process.env.APP_URL ? `https://${process.env.APP_URL}` : "https://plumboost.com";
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: org.stripeCustomerId,
         return_url: `${appUrl}/billing`,
