@@ -33,6 +33,7 @@ export interface IStorage {
   getBoostActions(projectId: string): Promise<BoostAction[]>;
   createBoostAction(action: InsertBoostAction): Promise<BoostAction>;
   updateBoostAction(id: number, data: Partial<InsertBoostAction>): Promise<BoostAction>;
+  clearGeneratedBoostActions(projectId: string): Promise<void>;
   getCitations(projectId: string): Promise<Citation[]>;
   createCitation(citation: InsertCitation): Promise<Citation>;
   upsertCitation(citation: InsertCitation): Promise<Citation>;
@@ -161,6 +162,10 @@ export class DatabaseStorage implements IStorage {
   async updateBoostAction(id: number, data: Partial<InsertBoostAction>): Promise<BoostAction> {
     const [updated] = await db.update(boostActions).set(data).where(eq(boostActions.id, id)).returning();
     return updated;
+  }
+
+  async clearGeneratedBoostActions(projectId: string): Promise<void> {
+    await db.delete(boostActions).where(eq(boostActions.projectId, projectId));
   }
 
   async getCitations(projectId: string): Promise<Citation[]> {

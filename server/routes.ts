@@ -10,6 +10,7 @@ import {
 } from "@shared/schema";
 import { runAnalysis } from "./ai-analysis";
 import { scanEmitter, type ScanEvent } from "./scan-events";
+import { generateBoostActions } from "./boost-generator";
 
 const AUTH_USERNAME = "virta";
 const AUTH_PASSWORD_HASH = "437827299a07f71acbdae3cf2311403f:8c787d52511e60fd315f714dd0f312985c312cea153419a28addf9e346ecc95d1949e36a866d363bb1dd8e97011776d270964ed287d0618763bb645f3ed3efb2";
@@ -261,6 +262,38 @@ export async function registerRoutes(
       res.json(action);
     } catch (err: any) {
       res.status(400).json({ message: err.message });
+    }
+  });
+
+  // Generate AI-powered boost actions using Claude Sonnet
+  app.post("/api/projects/:id/boost-actions/generate", async (req, res) => {
+    try {
+      const projectId = req.params.id;
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+
+      const generated = await generateBoostActions(projectId);
+
+      // Clear old auto-generated actions and save new ones
+      await storage.clearGeneratedBoostActions(projectId);
+      const saved = await Promise.all(
+        generated.map((a) =>
+          storage.createBoostAction({
+            projectId,
+            title: a.title,
+            description: a.description,
+            category: a.category,
+            priority: a.priority,
+            effort: a.effort,
+            status: "todo",
+          })
+        )
+      );
+
+      res.json(saved);
+    } catch (err: any) {
+      console.error("Boost action generation error:", err);
+      res.status(500).json({ message: err.message || "Failed to generate boost actions" });
     }
   });
 
