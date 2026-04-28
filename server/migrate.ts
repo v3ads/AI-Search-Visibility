@@ -180,8 +180,16 @@ async function migrate() {
     console.log("✓ organizations table ready");
 
     // ── 3. Create/fix org_members table ──────────────────────────────────────
+    // Check if id column has a sequence (SERIAL). If not, drop and recreate.
+    const { rows: idSeqRows } = await pool.query(`
+      SELECT column_default FROM information_schema.columns
+      WHERE table_name = 'org_members' AND column_name = 'id' AND table_schema = 'public'
+    `);
+    const idHasSerial = idSeqRows.length > 0 && idSeqRows[0].column_default && idSeqRows[0].column_default.includes('nextval');
     const orgMembersCols = await getTableColumns(pool, 'org_members');
-    if (orgMembersCols.length === 0) {
+    if (orgMembersCols.length === 0 || !idHasSerial) {
+      // Drop and recreate with proper SERIAL id
+      await pool.query(`DROP TABLE IF EXISTS org_members CASCADE`);
       await pool.query(`
         CREATE TABLE org_members (
           id SERIAL PRIMARY KEY,
@@ -192,7 +200,7 @@ async function migrate() {
           UNIQUE(org_id, user_id)
         );
       `);
-      console.log("✓ org_members table created");
+      console.log("✓ org_members table created with SERIAL id");
     } else {
       // Rename camelCase columns to snake_case
       await renameColumnIfExists(pool, 'org_members', 'orgId', 'org_id');
