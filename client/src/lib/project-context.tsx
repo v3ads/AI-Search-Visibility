@@ -9,7 +9,7 @@ interface ProjectContextValue {
   activeProjectId: string | null;
   setActiveProjectId: (id: string) => void;
   isLoading: boolean;
-  createProject: (data: Omit<Project, "id" | "userId" | "createdAt">) => Promise<Project>;
+  createProject: (data: Omit<Project, "id" | "userId" | "createdAt" | "orgId">) => Promise<Project>;
   updateProject: (id: string, data: Partial<Project>) => Promise<Project>;
   deleteProject: (id: string) => Promise<void>;
 }
@@ -51,7 +51,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   const createMutation = useMutation({
-    mutationFn: async (data: Omit<Project, "id" | "userId" | "createdAt">) => {
+    mutationFn: async (data: Omit<Project, "id" | "userId" | "createdAt" | "orgId">) => {
       const res = await apiRequest("POST", "/api/projects", data);
       return res.json() as Promise<Project>;
     },

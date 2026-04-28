@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProject, useCompetitors, useTags } from "@/hooks/use-project-data";
 import { useProjectContext } from "@/lib/project-context";
+import { useAuth } from "@/lib/auth-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -48,6 +49,7 @@ export default function SettingsPage() {
   const { data: competitors, isLoading: competitorsLoading } = useCompetitors();
   const { data: tags, isLoading: tagsLoading } = useTags();
   const { updateProject, deleteProject } = useProjectContext();
+  const { org } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -282,7 +284,7 @@ export default function SettingsPage() {
             <p className="text-xs text-muted-foreground">Project ID</p>
             <p className="text-xs font-mono text-muted-foreground">{project.id}</p>
           </div>
-          <Badge variant="secondary" className="capitalize">{project.plan ?? "starter"} plan</Badge>
+          <Badge variant="secondary" className="capitalize">{org?.plan ?? "starter"} plan</Badge>
         </div>
       </Card>
 

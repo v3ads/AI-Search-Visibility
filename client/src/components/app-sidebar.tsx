@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Eye, PieChart, Trophy, Shield, SmilePlus,
   Link2, FileText, Rocket, Settings, Zap, ChevronsUpDown, Plus, Check, Radar,
+  CreditCard, Users, Crown,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel,
@@ -13,13 +14,24 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectContext } from "@/lib/project-context";
+import { useAuth } from "@/lib/auth-context";
 import { CreateProjectWizard } from "./create-project-wizard";
+
+const PLAN_COLORS: Record<string, string> = {
+  free: "text-muted-foreground",
+  starter: "text-blue-500",
+  growth: "text-green-500",
+  agency: "text-purple-500",
+  enterprise: "text-yellow-500",
+};
 
 export function AppSidebar() {
   const [location, navigate] = useLocation();
   const { projects, activeProject, activeProjectId, setActiveProjectId, isLoading } = useProjectContext();
+  const { org } = useAuth();
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const base = activeProjectId ? `/projects/${activeProjectId}` : "/projects/loading";
@@ -51,6 +63,11 @@ export function AppSidebar() {
     navigate(`/projects/${id}`);
   };
 
+  const plan = org?.plan || "free";
+  const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+  const scansLeft = (org?.maxScansPerMonth || 1) - (org?.scansThisMonth || 0);
+  const scansMax = org?.maxScansPerMonth || 1;
+
   return (
     <>
       <Sidebar>
@@ -61,8 +78,8 @@ export function AppSidebar() {
               <Zap className="w-3.5 h-3.5 text-primary-foreground" />
             </div>
             <div>
-              <span className="font-bold text-sm tracking-tight">AI Visibility</span>
-              <span className="text-[10px] text-muted-foreground block leading-tight">Search Intelligence</span>
+              <span className="font-bold text-sm tracking-tight">PlumBoost</span>
+              <span className="text-[10px] text-muted-foreground block leading-tight">AI Search Visibility</span>
             </div>
           </div>
 
@@ -123,7 +140,7 @@ export function AppSidebar() {
                 {analyticsItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild data-active={isActive(item.url)}>
-                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                      <Link href={item.url}>
                         <item.icon className="w-4 h-4" />
                         <span>{item.title}</span>
                       </Link>
@@ -141,7 +158,7 @@ export function AppSidebar() {
                 {configItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild data-active={isActive(item.url)}>
-                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                      <Link href={item.url}>
                         <item.icon className="w-4 h-4" />
                         <span>{item.title}</span>
                       </Link>
@@ -151,15 +168,66 @@ export function AppSidebar() {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild data-active={location === "/team"}>
+                    <Link href="/team">
+                      <Users className="w-4 h-4" />
+                      <span>Team</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild data-active={location === "/billing"}>
+                    <Link href="/billing">
+                      <CreditCard className="w-4 h-4" />
+                      <span>Billing</span>
+                      {plan === "free" && (
+                        <Badge variant="secondary" className="ml-auto text-[10px] py-0">Upgrade</Badge>
+                      )}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
         </SidebarContent>
 
         <SidebarFooter className="p-3">
-          {activeProject && (
-            <div className="rounded-md bg-primary/10 border border-primary/20 p-3">
-              <p className="text-xs font-medium text-primary capitalize">{activeProject.plan ?? "Starter"} Plan</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{activeProject.domain}</p>
+          <div className="rounded-md bg-muted/60 border p-3 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Crown className={`w-3.5 h-3.5 ${PLAN_COLORS[plan]}`} />
+                <span className={`text-xs font-semibold ${PLAN_COLORS[plan]}`}>{planLabel} Plan</span>
+              </div>
+              {plan === "free" && (
+                <Link href="/billing">
+                  <span className="text-[10px] text-primary hover:underline cursor-pointer">Upgrade</span>
+                </Link>
+              )}
             </div>
-          )}
+            {scansMax !== 999 && (
+              <div>
+                <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                  <span>Scans this month</span>
+                  <span>{org?.scansThisMonth || 0}/{scansMax}</span>
+                </div>
+                <div className="h-1 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all"
+                    style={{ width: `${Math.min(100, ((org?.scansThisMonth || 0) / scansMax) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {org?.name && (
+              <p className="text-[10px] text-muted-foreground truncate">{org.name}</p>
+            )}
+          </div>
         </SidebarFooter>
       </Sidebar>
 

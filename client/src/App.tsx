@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,11 +9,19 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ProjectProvider, useProjectContext } from "@/lib/project-context";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
+import { LogOut, User, CreditCard, Users, ShieldAlert, Zap } from "lucide-react";
+import { CreateProjectWizard } from "@/components/create-project-wizard";
 import NotFound from "@/pages/not-found";
-import Login from "@/pages/login";
+import LoginPage from "@/pages/auth/login";
+import SignupPage from "@/pages/auth/signup";
+import ForgotPasswordPage from "@/pages/auth/forgot-password";
+import ResetPasswordPage from "@/pages/auth/reset-password";
+import AcceptInvitePage from "@/pages/auth/accept-invite";
 import Dashboard from "@/pages/dashboard";
 import Visibility from "@/pages/visibility";
 import ShareOfVoice from "@/pages/share-of-voice";
@@ -25,32 +33,123 @@ import Prompts from "@/pages/prompts";
 import BoostActions from "@/pages/boost-actions";
 import SettingsPage from "@/pages/settings";
 import ScanPage from "@/pages/scan";
-import { CreateProjectWizard } from "@/components/create-project-wizard";
+import BillingPage from "@/pages/billing";
+import TeamPage from "@/pages/team";
+import AccountPage from "@/pages/account";
+import AdminPage from "@/pages/admin";
 
-function Router() {
+const PLAN_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
+  free: { label: "Free", variant: "secondary" },
+  starter: { label: "Starter", variant: "outline" },
+  growth: { label: "Growth", variant: "default" },
+  agency: { label: "Agency", variant: "default" },
+  enterprise: { label: "Enterprise", variant: "default" },
+};
+
+function AppHeader() {
+  const { user, org, logout } = useAuth();
+  const [, navigate] = useLocation();
+
+  const initials = user?.name
+    ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : user?.email?.[0]?.toUpperCase() || "?";
+
+  const planBadge = PLAN_BADGE[org?.plan || "free"];
+
+  const handleLogout = async () => {
+    await logout();
+    queryClient.clear();
+    navigate("/login");
+  };
+
+  return (
+    <header className="flex items-center justify-between gap-1 p-2 border-b h-12 shrink-0">
+      <SidebarTrigger />
+      <div className="flex items-center gap-2">
+        {planBadge && (
+          <Badge variant={planBadge.variant} className="text-xs hidden sm:flex">
+            {planBadge.label}
+          </Badge>
+        )}
+        <ThemeToggle />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+              <Avatar className="h-7 w-7">
+                <AvatarFallback className="text-xs bg-primary text-primary-foreground">{initials}</AvatarFallback>
+              </Avatar>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <div className="px-2 py-1.5">
+              <p className="text-sm font-medium truncate">{user?.name || user?.email}</p>
+              <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate("/account")}>
+              <User className="w-4 h-4 mr-2" />Account settings
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/team")}>
+              <Users className="w-4 h-4 mr-2" />Team
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/billing")}>
+              <CreditCard className="w-4 h-4 mr-2" />Billing
+              {org?.plan === "free" && <Badge variant="secondary" className="ml-auto text-xs">Upgrade</Badge>}
+            </DropdownMenuItem>
+            {user?.email === "vipaymanshalaby@gmail.com" && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate("/admin")} className="text-red-600">
+                  <ShieldAlert className="w-4 h-4 mr-2" />Admin panel
+                </DropdownMenuItem>
+              </>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+              <LogOut className="w-4 h-4 mr-2" />Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </header>
+  );
+}
+
+function ProjectRouter() {
   const { activeProjectId, projects, isLoading } = useProjectContext();
+  const { org } = useAuth();
+  const [, navigate] = useLocation();
   const [wizardOpen, setWizardOpen] = useState(false);
 
-  // Show wizard if no projects exist after loading
-  if (!isLoading && projects.length === 0) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (projects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
         <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-          <span className="text-3xl">🚀</span>
+          <Zap className="w-8 h-8 text-primary" />
         </div>
         <div>
-          <h2 className="text-xl font-semibold">No projects yet</h2>
-          <p className="text-muted-foreground text-sm mt-1">
-            Create your first project to start monitoring your brand's AI search visibility.
+          <h2 className="text-xl font-semibold">Welcome to PlumBoost</h2>
+          <p className="text-muted-foreground text-sm mt-1 max-w-sm">
+            Create your first project to start monitoring your brand's AI search visibility across ChatGPT, Claude, Gemini, and Grok.
           </p>
         </div>
-        <Button onClick={() => setWizardOpen(true)}>Create Your First Project</Button>
+        <Button onClick={() => setWizardOpen(true)}>
+          <Zap className="w-4 h-4 mr-2" />Create Your First Project
+        </Button>
         <CreateProjectWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
       </div>
     );
   }
 
-  if (isLoading || !activeProjectId) {
+  if (!activeProjectId) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -65,7 +164,6 @@ function Router() {
       <Route path="/">
         <Redirect to={base} />
       </Route>
-      {/* Dynamic project routes — match any project ID */}
       <Route path="/projects/:id" component={Dashboard} />
       <Route path="/projects/:id/visibility" component={Visibility} />
       <Route path="/projects/:id/share-of-voice" component={ShareOfVoice} />
@@ -82,85 +180,74 @@ function Router() {
   );
 }
 
-function App() {
-  const [user, setUser] = useState<string | null>(null);
-  const [checking, setChecking] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then((res) => {
-        if (res.ok) return res.json();
-        throw new Error("Not authenticated");
-      })
-      .then((data) => setUser(data.username))
-      .catch(() => setUser(null))
-      .finally(() => setChecking(false));
-  }, []);
-
-  const handleLogout = async () => {
-    await apiRequest("POST", "/api/auth/logout");
-    setUser(null);
-    queryClient.clear();
-  };
-
-  if (checking) {
-    return (
-      <ThemeProvider>
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        </div>
-      </ThemeProvider>
-    );
-  }
-
-  if (!user) {
-    return (
-      <ThemeProvider>
-        <Login onLogin={(username) => setUser(username)} />
-        <Toaster />
-      </ThemeProvider>
-    );
-  }
-
+function AuthenticatedApp() {
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
 
   return (
+    <ProjectProvider>
+      <TooltipProvider>
+        <SidebarProvider style={style as React.CSSProperties}>
+          <div className="flex h-screen w-full">
+            <AppSidebar />
+            <div className="flex flex-col flex-1 min-w-0">
+              <AppHeader />
+              <main className="flex-1 overflow-auto">
+                <Switch>
+                  {/* Global pages */}
+                  <Route path="/billing" component={BillingPage} />
+                  <Route path="/team" component={TeamPage} />
+                  <Route path="/account" component={AccountPage} />
+                  <Route path="/admin" component={AdminPage} />
+                  {/* Project pages */}
+                  <Route component={ProjectRouter} />
+                </Switch>
+              </main>
+            </div>
+          </div>
+        </SidebarProvider>
+        <Toaster />
+      </TooltipProvider>
+    </ProjectProvider>
+  );
+}
+
+function AppContent() {
+  const { isAuthenticated, isLoading } = useAuth();
+  const [location] = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Public routes — always accessible
+  if (location === "/login" || location.startsWith("/login")) return <LoginPage />;
+  if (location === "/signup" || location.startsWith("/signup")) return <SignupPage />;
+  if (location === "/forgot-password") return <ForgotPasswordPage />;
+  if (location === "/reset-password") return <ResetPasswordPage />;
+  if (location === "/accept-invite") return <AcceptInvitePage />;
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    return <Redirect to="/login" />;
+  }
+
+  return <AuthenticatedApp />;
+}
+
+function App() {
+  return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <ProjectProvider>
-          <TooltipProvider>
-            <SidebarProvider style={style as React.CSSProperties}>
-              <div className="flex h-screen w-full">
-                <AppSidebar />
-                <div className="flex flex-col flex-1 min-w-0">
-                  <header className="flex items-center justify-between gap-1 p-2 border-b h-12 shrink-0">
-                    <SidebarTrigger data-testid="button-sidebar-toggle" />
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground" data-testid="text-username">{user}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleLogout}
-                        className="h-8 w-8"
-                        data-testid="button-logout"
-                      >
-                        <LogOut className="h-4 w-4" />
-                      </Button>
-                      <ThemeToggle />
-                    </div>
-                  </header>
-                  <main className="flex-1 overflow-auto">
-                    <Router />
-                  </main>
-                </div>
-              </div>
-            </SidebarProvider>
-            <Toaster />
-          </TooltipProvider>
-        </ProjectProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

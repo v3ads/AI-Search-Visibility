@@ -88,7 +88,6 @@ export function CreateProjectWizard({ open, onClose }: Props) {
         industry: industry || null,
         country,
         language: "en",
-        plan: "starter",
       });
 
       // Add competitors via API
