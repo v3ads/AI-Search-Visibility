@@ -3,7 +3,7 @@
  */
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY!;
-const FROM_EMAIL = process.env.FROM_EMAIL || "noreply@plumboost.com";
+const FROM_EMAIL = process.env.FROM_EMAIL || "info@plumboost.com";
 const FROM_NAME = process.env.FROM_NAME || "PlumBoost";
 const APP_URL = process.env.APP_URL || "https://plumboost.com";
 
