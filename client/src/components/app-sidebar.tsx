@@ -9,7 +9,7 @@ import {
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel,
   SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton,
-  SidebarHeader, SidebarFooter,
+  SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -31,6 +31,9 @@ const PLAN_COLORS: Record<string, string> = {
 
 export function AppSidebar() {
   const [location, navigate] = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  const closeOnMobile = () => { if (isMobile) setOpenMobile(false); };
   const { projects, activeProject, activeProjectId, setActiveProjectId, isLoading } = useProjectContext();
   const { org } = useAuth();
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -63,6 +66,7 @@ export function AppSidebar() {
   const handleSwitchProject = (id: string) => {
     setActiveProjectId(id);
     navigate(`/projects/${id}`);
+    closeOnMobile();
   };
 
   const plan = org?.plan || "free";
@@ -140,7 +144,7 @@ export function AppSidebar() {
                 {analyticsItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild data-active={isActive(item.url)}>
-                      <Link href={item.url}>
+                      <Link href={item.url} onClick={closeOnMobile}>
                         <item.icon className="w-4 h-4" />
                         <span>{item.title}</span>
                       </Link>
@@ -158,7 +162,7 @@ export function AppSidebar() {
                 {configItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild data-active={isActive(item.url)}>
-                      <Link href={item.url}>
+                      <Link href={item.url} onClick={closeOnMobile}>
                         <item.icon className="w-4 h-4" />
                         <span>{item.title}</span>
                       </Link>
@@ -175,7 +179,7 @@ export function AppSidebar() {
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild data-active={location === "/team"}>
-                    <Link href="/team">
+                    <Link href="/team" onClick={closeOnMobile}>
                       <Users className="w-4 h-4" />
                       <span>Team</span>
                     </Link>
@@ -183,7 +187,7 @@ export function AppSidebar() {
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild data-active={location === "/billing"}>
-                    <Link href="/billing">
+                    <Link href="/billing" onClick={closeOnMobile}>
                       <CreditCard className="w-4 h-4" />
                       <span>Billing</span>
                       {plan === "free" && (
