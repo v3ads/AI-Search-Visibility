@@ -50,6 +50,17 @@ function ScanButton() {
   const [pollId, setPollId] = useState<number | null>(null);
   const { toast } = useToast();
   const { activeProjectId } = useProjectContext();
+  const { data: scans } = useAnalysisRuns();
+
+  // Auto-resume: if there's a running scan when the page loads, pick it up
+  useEffect(() => {
+    if (!scans || pollId || scanning) return;
+    const runningRun = scans.find((r: any) => r.status === "running");
+    if (runningRun) {
+      setScanning(true);
+      setPollId(runningRun.id);
+    }
+  }, [scans, pollId, scanning]);
 
   useEffect(() => {
     if (!pollId) return;
@@ -330,7 +341,11 @@ export default function Dashboard() {
   if (!project || !metrics) return null;
 
   const latest = getLatestMetrics(metrics, project.brandName);
-  const modelCount = new Set(metrics.map((m) => m.model)).size;
+  const modelCount = metrics && metrics.length > 0
+    ? new Set(metrics.map((m) => m.model)).size
+    : scans && scans.length > 0 && scans[0].modelsUsed
+      ? scans[0].modelsUsed.length
+      : 2; // free plan default: ChatGPT + Claude
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
