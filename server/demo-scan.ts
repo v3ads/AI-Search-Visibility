@@ -5,6 +5,7 @@
  */
 
 import { callOpenRouter, callOpenRouterJSON } from "./openrouter";
+import { getSitePrompts, getFallbackPrompts } from "./site-intelligence";
 import { log } from "./index";
 
 const DEMO_MODELS: Record<string, string> = {
@@ -17,14 +18,29 @@ function sanitize(s: string, max = 120): string {
   return s.replace(/["""''`\x00-\x1F]/g, "").slice(0, max).trim();
 }
 
-/** Build 2 realistic prompts from brand + industry */
-function buildDemoPrompts(brandName: string, domain: string, industry: string): string[] {
-  const b = sanitize(brandName, 60);
-  const ind = sanitize(industry, 60);
-  return [
-    `What are the best ${ind} companies or tools? Give me your top recommendations.`,
-    `I'm evaluating options in ${ind}. What should I know about ${b} compared to alternatives?`,
-  ];
+/** Generate brand-specific prompts using Firecrawl + GPT, with fallback */
+async function getDemoPrompts(
+  brandName: string,
+  domain: string,
+  industry: string
+): Promise<{ prompts: string[]; contextNote: string }> {
+  // Only crawl if FIRECRAWL_API_KEY is set
+  if (process.env.FIRECRAWL_API_KEY) {
+    try {
+      const { prompts, siteContext } = await getSitePrompts(domain, brandName, 2);
+      if (prompts.length >= 2) {
+        const note = siteContext.location
+          ? `${siteContext.category} in ${siteContext.location}`
+          : siteContext.category;
+        return { prompts, contextNote: note };
+      }
+    } catch (err: any) {
+      log(`[demo-scan] Firecrawl failed, using fallback: ${err.message}`, "demo");
+    }
+  }
+  // Fallback to generic industry prompts
+  const prompts = await getFallbackPrompts(brandName, industry, 2);
+  return { prompts, contextNote: industry };
 }
 
 export interface DemoScanResult {
@@ -83,7 +99,19 @@ export async function startDemoScan(
   };
   demoResults.set(id, scan);
 
-  const prompts = buildDemoPrompts(safe.brand, safe.domain, safe.industry);
+  // Generate site-specific prompts via Firecrawl (with fallback)
+  let prompts: string[];
+  let contextNote: string;
+  try {
+    ({ prompts, contextNote } = await getDemoPrompts(safe.brand, safe.domain, safe.industry));
+    log(`[demo-scan] ${id} using prompts for: ${contextNote}`, "demo");
+  } catch (err: any) {
+    log(`[demo-scan] prompt generation failed: ${err.message}`, "demo");
+    prompts = [
+      `What are the best ${safe.industry} options available?`,
+      `I'm looking for recommendations in ${safe.industry} — what do you suggest?`,
+    ];
+  }
 
   // Per-model accumulators
   const acc: Record<string, { visibility: number; total: number; ranks: number[]; sentiments: number[] }> = {};

@@ -762,6 +762,54 @@ Rules:
     }
   });
 
+  // ── Prompt Suggestions (Firecrawl-powered) ───────────────────────────────────
+
+  app.post("/api/projects/:id/prompts/suggest", requireOrgAccess, async (req, res) => {
+    try {
+      const project = await storage.getProject(req.params.id as string);
+      if (!project || project.orgId !== req.session.orgId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const { getSitePrompts, getFallbackPrompts } = await import("./site-intelligence");
+
+      // Check plan prompt limit — only suggest up to what they can add
+      const org = await storage.getOrgById(req.session.orgId!);
+      const existing = await storage.getPrompts(req.params.id as string);
+      const maxPrompts = org?.maxPrompts ?? PLAN_LIMITS.free.maxPrompts;
+      const available = Math.max(0, maxPrompts - existing.length);
+      const count = Math.min(5, available);
+
+      if (count === 0) {
+        return res.json({ prompts: [], message: "Prompt limit reached for your plan." });
+      }
+
+      let prompts: string[] = [];
+      if (process.env.FIRECRAWL_API_KEY && project.domain) {
+        try {
+          const result = await getSitePrompts(project.domain, project.brandName, count);
+          prompts = result.prompts;
+        } catch (err: any) {
+          console.error("[prompt-suggest] Firecrawl failed:", err.message);
+        }
+      }
+
+      // Fallback if Firecrawl failed or no key
+      if (prompts.length === 0) {
+        prompts = await getFallbackPrompts(
+          project.brandName,
+          project.industry || "general business",
+          count
+        );
+      }
+
+      res.json({ prompts });
+    } catch (err: any) {
+      console.error("[prompt-suggest] error:", err.message);
+      res.json({ prompts: [] });
+    }
+  });
+
   app.patch("/api/prompts/:id", requireOrgAccess, async (req, res) => {
     try {
       res.json(await storage.updatePrompt(parseInt(req.params.id as string), req.body));
