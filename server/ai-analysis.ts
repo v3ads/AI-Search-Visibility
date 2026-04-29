@@ -1,18 +1,26 @@
 import { storage } from "./storage";
 import { log } from "./index";
 import { emitScanEvent } from "./scan-events";
-
-const OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions";
+import { callOpenRouter, callOpenRouterJSON } from "./openrouter";
 
 // Fast, cheap model used for JSON extraction analysis
 const EXTRACTION_MODEL = "openai/gpt-4o-mini";
 
 const MODEL_MAP: Record<string, string> = {
-  "ChatGPT": "openai/gpt-4o",
-  "Claude": "anthropic/claude-sonnet-4-5",
+  "ChatGPT":       "openai/gpt-4o",
+  "Claude":        "anthropic/claude-sonnet-4-5",
   "Google Gemini": "google/gemini-2.5-pro",
-  "Grok": "x-ai/grok-3",
+  "Grok":          "x-ai/grok-3",
 };
+
+/** Strip characters that could break JSON structure or inject prompt commands */
+function sanitizeText(input: string, maxLen = 200): string {
+  return input
+    .replace(/["""''`]/g, "'")
+    .replace(/[\x00-\x1F]/g, "")
+    .slice(0, maxLen)
+    .trim();
+}
 
 interface BrandAnalysis {
   brandName: string;
@@ -27,42 +35,6 @@ interface PromptAnalysisResult {
   allCitedUrls: { url: string; title: string }[];
 }
 
-async function callOpenRouter(
-  modelId: string,
-  messages: { role: string; content: string }[],
-  maxTokens = 2048
-): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
-
-  const res = await fetch(OPENROUTER_BASE, {
-    signal: controller.signal,
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      "HTTP-Referer": process.env.APP_URL || "https://ai-search-visibility.vercel.app",
-      "X-Title": "AI Search Visibility",
-    },
-    body: JSON.stringify({
-      model: modelId,
-      messages,
-      max_tokens: maxTokens,
-      temperature: 0.7,
-    }),
-  });
-
-  clearTimeout(timeout);
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`OpenRouter ${modelId} error ${res.status}: ${errText.slice(0, 200)}`);
-  }
-
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || "";
-}
-
 async function analyzeResponse(
   promptText: string,
   aiResponse: string,
@@ -70,17 +42,20 @@ async function analyzeResponse(
   competitorNames: string[]
 ): Promise<PromptAnalysisResult> {
   const allBrands = [ourBrand, ...competitorNames];
+  const safeBrands = allBrands.map((b) => sanitizeText(b, 80));
+  const safePrompt = sanitizeText(promptText, 500);
+  const safeResponse = aiResponse.slice(0, 8000);
 
   const extractionPrompt = `You are a brand-mention analysis engine. Given an AI-generated response to a user query, extract structured data about brand mentions.
 
-USER QUERY: "${promptText}"
+USER QUERY: "${safePrompt}"
 
 AI RESPONSE:
 """
-${aiResponse}
+${safeResponse}
 """
 
-BRANDS TO TRACK: ${allBrands.join(", ")}
+BRANDS TO TRACK: ${safeBrands.join(", ")}
 
 Analyze the response and return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 {
@@ -101,19 +76,18 @@ Analyze the response and return ONLY valid JSON (no markdown, no code fences) wi
 Rules:
 - "mentioned": true if the brand appears anywhere in the response
 - "rank": position in the response (1=first mentioned/recommended, 0=not mentioned)
-- "sentimentScore": 0-100 (0=very negative, 50=neutral, 100=very positive). Base this on how favorably the brand is discussed.
+- "sentimentScore": 0-100 (0=very negative, 50=neutral, 100=very positive)
 - "citedUrls": any URLs specifically associated with this brand
 - "allCitedUrls": all URLs/sources cited in the entire response
 - Include ALL tracked brands, even if not mentioned (mentioned=false, rank=0, sentimentScore=50)`;
 
   try {
-    const raw = await callOpenRouter(EXTRACTION_MODEL, [
-      { role: "user", content: extractionPrompt },
-    ], 1500);
-
-    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const parsed = JSON.parse(cleaned);
-    return parsed as PromptAnalysisResult;
+    const parsed = await callOpenRouterJSON<PromptAnalysisResult>(
+      EXTRACTION_MODEL,
+      [{ role: "user", content: extractionPrompt }],
+      { maxTokens: 1500, temperature: 0 }
+    );
+    return parsed;
   } catch (err: any) {
     log(`Analysis extraction failed: ${err.message}`, "ai-analysis");
     return {
@@ -129,7 +103,10 @@ Rules:
   }
 }
 
-export async function runAnalysis(projectId: string, existingRunId?: number): Promise<number> {
+export async function runAnalysis(
+  projectId: string,
+  existingRunId: number
+): Promise<number> {
   const project = await storage.getProject(projectId);
   if (!project) throw new Error("Project not found");
 
@@ -140,24 +117,13 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
   const competitorNames = competitors.map((c) => c.brandName);
   const models = Object.keys(MODEL_MAP);
 
-  let run;
-  if (existingRunId) {
-    const existing = await storage.getAnalysisRun(existingRunId);
-    if (!existing) throw new Error("Analysis run not found");
-    run = existing;
-  } else {
-    run = await storage.createAnalysisRun({
-      projectId,
-      status: "running",
-      totalPrompts: activePrompts.length * models.length,
-      completedPrompts: 0,
-      modelsUsed: models,
-    });
-  }
+  // Always use the run created by the route handler — never create a second one
+  const existing = await storage.getAnalysisRun(existingRunId);
+  if (!existing) throw new Error("Analysis run not found");
+  const run = existing;
 
   const total = activePrompts.length * models.length;
 
-  // Emit start event
   emitScanEvent(run.id, {
     type: "start",
     runId: run.id,
@@ -177,7 +143,6 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
   try {
     for (const prompt of activePrompts) {
       for (const [displayName, modelId] of Object.entries(MODEL_MAP)) {
-        // Emit "running" event before calling the model
         emitScanEvent(run.id, {
           type: "progress",
           runId: run.id,
@@ -221,24 +186,27 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
             if (cite.url && cite.url.startsWith("http")) {
               try {
                 const urlDomain = new URL(cite.url).hostname.replace("www.", "");
-                const isOwned = urlDomain === project.domain || urlDomain.endsWith(`.${project.domain}`);
+                const isOwned =
+                  urlDomain === project.domain ||
+                  urlDomain.endsWith(`.${project.domain}`);
                 await storage.upsertCitation({
                   projectId,
                   url: cite.url,
                   domain: urlDomain,
                   pageTitle: cite.title || null,
                   citationCount: 1,
-                  isOwned: isOwned,
+                  isOwned,
                   weekChange: 0,
                 });
-              } catch {}
+              } catch {
+                // Malformed URL — skip
+              }
             }
           }
 
           completed++;
           await storage.updateAnalysisRun(run.id, { completedPrompts: completed });
 
-          // Emit "done" event after successful model call
           emitScanEvent(run.id, {
             type: "progress",
             runId: run.id,
@@ -253,7 +221,6 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
           completed++;
           await storage.updateAnalysisRun(run.id, { completedPrompts: completed });
 
-          // Emit "error" event on failure
           emitScanEvent(run.id, {
             type: "progress",
             runId: run.id,
@@ -267,31 +234,37 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
       }
     }
 
+    // Persist aggregated daily metrics using upsert (no duplicates)
     const brandEntries = Array.from(brandMetrics.entries());
     for (const [brandName, modelMap] of brandEntries) {
-      const modelEntries = Array.from(modelMap.entries());
-      for (const [model, data] of modelEntries) {
+      for (const [model, data] of Array.from(modelMap.entries())) {
         const visibilityPct = data.total > 0 ? (data.visibility / data.total) * 100 : 0;
-        const avgRank = data.ranks.length > 0 ? data.ranks.reduce((a: number, b: number) => a + b, 0) / data.ranks.length : 0;
-        const sentimentScore = data.sentiments.length > 0 ? data.sentiments.reduce((a: number, b: number) => a + b, 0) / data.sentiments.length : 50;
+        const avgRank =
+          data.ranks.length > 0
+            ? data.ranks.reduce((a: number, b: number) => a + b, 0) / data.ranks.length
+            : 0;
+        const sentimentScore =
+          data.sentiments.length > 0
+            ? data.sentiments.reduce((a: number, b: number) => a + b, 0) / data.sentiments.length
+            : 50;
 
-        const allBrandsForModel: string[] = [];
-        for (const [bn, mm] of brandEntries) {
+        const totalVisibilityForModel = brandEntries.reduce((sum, [bn, mm]) => {
           const md = mm.get(model);
-          if (md && md.visibility > 0) allBrandsForModel.push(bn);
-        }
-        const sovPct = allBrandsForModel.length > 0
-          ? (data.visibility / allBrandsForModel.reduce((sum: number, bn: string) => {
-              const md = brandMetrics.get(bn)?.get(model);
-              return sum + (md?.visibility || 0);
-            }, 0)) * 100
-          : 0;
+          return sum + (md?.visibility || 0);
+        }, 0);
+        const sovPct =
+          totalVisibilityForModel > 0
+            ? (data.visibility / totalVisibilityForModel) * 100
+            : 0;
 
         const brandStrength = Math.round(
-          visibilityPct * 0.3 + sovPct * 0.25 + (avgRank > 0 ? Math.max(0, 100 - (avgRank - 1) * 15) : 0) * 0.25 + sentimentScore * 0.2
+          visibilityPct * 0.3 +
+            sovPct * 0.25 +
+            (avgRank > 0 ? Math.max(0, 100 - (avgRank - 1) * 15) : 0) * 0.25 +
+            sentimentScore * 0.2
         );
 
-        await storage.createDailyMetric({
+        await storage.upsertDailyMetric({
           projectId,
           brandName,
           model,
@@ -311,13 +284,12 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
       completedAt: new Date(),
     });
 
-    emitScanEvent(run.id, {
-      type: "complete",
-      runId: run.id,
-      completedPrompts: completed,
-    });
+    emitScanEvent(run.id, { type: "complete", runId: run.id, completedPrompts: completed });
 
-    log(`Analysis run ${run.id} completed: ${completed} prompt-model combinations processed`, "ai-analysis");
+    log(
+      `Analysis run ${run.id} completed: ${completed} prompt-model combinations processed`,
+      "ai-analysis"
+    );
     return run.id;
   } catch (err: any) {
     await storage.updateAnalysisRun(run.id, {
@@ -326,12 +298,7 @@ export async function runAnalysis(projectId: string, existingRunId?: number): Pr
       completedAt: new Date(),
     });
 
-    emitScanEvent(run.id, {
-      type: "failed",
-      runId: run.id,
-      error: err.message,
-    });
-
+    emitScanEvent(run.id, { type: "failed", runId: run.id, error: err.message });
     throw err;
   }
 }

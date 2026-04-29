@@ -192,15 +192,18 @@ export async function updateProject(id: string, data: Partial<Project>): Promise
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await db.delete(analysisRuns).where(eq(analysisRuns.projectId, id));
-  await db.delete(dailyMetrics).where(eq(dailyMetrics.projectId, id));
-  await db.delete(citations).where(eq(citations.projectId, id));
-  await db.delete(boostActions).where(eq(boostActions.projectId, id));
-  await db.delete(prompts).where(eq(prompts.projectId, id));
-  await db.delete(tags).where(eq(tags.projectId, id));
-  await db.delete(competitors).where(eq(competitors.projectId, id));
-  await db.delete(scanSchedules).where(eq(scanSchedules.projectId, id));
-  await db.delete(projects).where(eq(projects.id, id));
+  // Use a transaction so partial failures leave no orphaned data
+  await db.transaction(async (tx) => {
+    await tx.delete(analysisRuns).where(eq(analysisRuns.projectId, id));
+    await tx.delete(dailyMetrics).where(eq(dailyMetrics.projectId, id));
+    await tx.delete(citations).where(eq(citations.projectId, id));
+    await tx.delete(boostActions).where(eq(boostActions.projectId, id));
+    await tx.delete(prompts).where(eq(prompts.projectId, id));
+    await tx.delete(tags).where(eq(tags.projectId, id));
+    await tx.delete(competitors).where(eq(competitors.projectId, id));
+    await tx.delete(scanSchedules).where(eq(scanSchedules.projectId, id));
+    await tx.delete(projects).where(eq(projects.id, id));
+  });
 }
 
 // ── Scan Schedules ────────────────────────────────────────────────────────────
@@ -288,6 +291,35 @@ export async function getDailyMetrics(projectId: string, days = 90): Promise<Dai
 }
 
 export async function createDailyMetric(metric: InsertDailyMetric): Promise<DailyMetric> {
+  const [created] = await db.insert(dailyMetrics).values(metric).returning();
+  return created;
+}
+
+/**
+ * Upsert a daily metric row — replaces any existing row for the same
+ * (projectId, brandName, model, date) combination so multiple scans on the
+ * same day don't produce duplicate rows.
+ */
+export async function upsertDailyMetric(metric: InsertDailyMetric): Promise<DailyMetric> {
+  const [existing] = await db
+    .select()
+    .from(dailyMetrics)
+    .where(
+      and(
+        eq(dailyMetrics.projectId, metric.projectId),
+        eq(dailyMetrics.brandName, metric.brandName),
+        eq(dailyMetrics.model, metric.model),
+        eq(dailyMetrics.date, metric.date)
+      )
+    );
+  if (existing) {
+    const [updated] = await db
+      .update(dailyMetrics)
+      .set(metric)
+      .where(eq(dailyMetrics.id, existing.id))
+      .returning();
+    return updated;
+  }
   const [created] = await db.insert(dailyMetrics).values(metric).returning();
   return created;
 }
@@ -430,7 +462,7 @@ export const storage = {
   getTags, createTag, deleteTag,
   getPrompts, createPrompt, updatePrompt, deletePrompt,
   getCompetitors, createCompetitor, deleteCompetitor,
-  getDailyMetrics, createDailyMetric,
+  getDailyMetrics, createDailyMetric, upsertDailyMetric,
   getBoostActions, createBoostAction, updateBoostAction, clearGeneratedBoostActions,
   getCitations, createCitation, upsertCitation,
   getAnalysisRuns, getAnalysisRun, createAnalysisRun, updateAnalysisRun,

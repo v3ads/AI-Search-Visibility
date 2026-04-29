@@ -1,15 +1,6 @@
-import OpenAI from "openai";
 import { storage } from "./storage";
+import { callOpenRouterJSON } from "./openrouter";
 import type { DailyMetric, Competitor, Citation } from "@shared/schema";
-
-const client = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1",
-  defaultHeaders: {
-    "HTTP-Referer": process.env.APP_URL || "https://ai-search-visibility-production.up.railway.app",
-    "X-Title": "AI Search Visibility",
-  },
-});
 
 const MODEL = "anthropic/claude-sonnet-4-5";
 
@@ -169,23 +160,14 @@ Return a JSON array of exactly 7 objects. Each object must have these exact fiel
 
 Order by priority descending (high first). Return ONLY the JSON array, no other text.`;
 
-  const response = await client.chat.completions.create({
-    model: MODEL,
-    messages: [
+  const actions = await callOpenRouterJSON<GeneratedAction[]>(
+    MODEL,
+    [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    temperature: 0.7,
-    max_tokens: 2000,
-  });
-
-  const content = response.choices[0]?.message?.content?.trim() || "[]";
-
-  // Extract JSON from response (handle potential markdown code blocks)
-  const jsonMatch = content.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) throw new Error("Claude did not return valid JSON array");
-
-  const actions: GeneratedAction[] = JSON.parse(jsonMatch[0]);
+    { maxTokens: 2000, temperature: 0.7 }
+  );
 
   // Validate structure
   const validCategories = ["content", "technical", "pr_outreach", "competitor_gap", "citations", "sentiment"];

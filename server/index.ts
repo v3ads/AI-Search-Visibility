@@ -4,6 +4,7 @@ import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { startScanScheduler } from "./scheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -35,6 +36,12 @@ app.use(express.urlencoded({ extended: false }));
 // Trust Cloudflare / Railway proxy so secure cookies work behind HTTPS termination
 app.set("trust proxy", 1);
 
+// Fail fast if SESSION_SECRET is missing in production
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+  console.error("FATAL: SESSION_SECRET environment variable is required in production");
+  process.exit(1);
+}
+
 const PgStore = connectPgSimple(session);
 app.use(
   session({
@@ -45,7 +52,7 @@ app.use(
       // esbuild bundling connect-pg-simple without its table.sql asset file
       createTableIfMissing: false,
     }),
-    secret: process.env.SESSION_SECRET || "fallback-dev-secret",
+    secret: process.env.SESSION_SECRET || "dev-only-secret-change-in-production",
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -93,7 +100,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Health check — registered before all other routes so Railway can reach it
+  app.get("/health", (_req, res) => res.json({ status: "ok", ts: Date.now() }));
+
   await registerRoutes(httpServer, app);
+
+  // Start scheduled scan cron (Growth+ plans)
+  startScanScheduler();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

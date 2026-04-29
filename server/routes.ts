@@ -2,6 +2,7 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import { createServer, type Server } from "http";
 import { randomBytes, createHash } from "crypto";
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
 import Stripe from "stripe";
 import * as storage from "./storage";
 import { seedDatabase } from "./seed";
@@ -17,10 +18,33 @@ import {
   sendWelcomeEmail, sendPasswordResetEmail, sendInvitationEmail,
   sendScanCompleteEmail,
 } from "./email";
+import { STRIPE_PRICE_IDS, APP_URL } from "./stripe-config";
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2025-03-31.basil" as any })
   : null;
+
+// ── Rate Limiters ─────────────────────────────────────────────────────────────
+
+/** Strict limiter for auth endpoints — prevents brute force & credential stuffing */
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later." },
+  skip: () => process.env.NODE_ENV !== "production",
+});
+
+/** Lighter limiter for scan triggers — prevents scan quota abuse */
+const scanLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many scan requests, slow down." },
+  skip: () => process.env.NODE_ENV !== "production",
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -109,7 +133,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ── Auth ────────────────────────────────────────────────────────────────────
 
-  app.post("/api/auth/signup", async (req, res) => {
+  app.post("/api/auth/signup", authLimiter, async (req, res) => {
     try {
       const { email, password, name, orgName } = req.body;
       if (!email || !password || !name || !orgName) {
@@ -161,7 +185,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       const { email, password } = req.body;
       if (!email || !password) return res.status(400).json({ message: "Email and password required" });
@@ -228,7 +252,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ org });
   });
 
-  app.post("/api/auth/forgot-password", async (req, res) => {
+  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
     try {
       const { email } = req.body;
       const user = await storage.getUserByEmail(email);
@@ -243,7 +267,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/auth/reset-password", async (req, res) => {
+  app.post("/api/auth/reset-password", authLimiter, async (req, res) => {
     try {
       const { token, password } = req.body;
       if (!token || !password || password.length < 8) {
@@ -344,7 +368,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/org/members/:userId", requireOrgAdmin, async (req, res) => {
     try {
       const { role } = req.body;
-      await storage.updateOrgMemberRole(req.session.orgId!, req.params.userId, role);
+      await storage.updateOrgMemberRole(req.session.orgId!, req.params.userId as string, role);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -353,7 +377,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/org/members/:userId", requireOrgAdmin, async (req, res) => {
     try {
-      const userId = req.params.userId;
+      const userId = req.params.userId as string;
       if (userId === req.session.userId) {
         return res.status(400).json({ message: "You cannot remove yourself" });
       }
@@ -449,23 +473,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await storage.updateOrg(org.id, { stripeCustomerId: customerId });
       }
 
-      const STRIPE_PRICES: Record<string, { monthly: string; yearly: string }> = {
-        starter: { monthly: "price_1TRCOIBN7gC36D1gqENKjmN9", yearly: "price_1TRCOJBN7gC36D1g6BaX5P7p" },
-        growth:  { monthly: "price_1TRCOJBN7gC36D1gx101Byq6", yearly: "price_1TRCOKBN7gC36D1gd3fr6LmK" },
-        agency:  { monthly: "price_1TRCOLBN7gC36D1gjZNcrhRS", yearly: "price_1TRCOLBN7gC36D1gv4N25LuS" },
-      };
       const billingCycle: "monthly" | "yearly" = req.body.billing === "yearly" ? "yearly" : "monthly";
-      const priceId = STRIPE_PRICES[plan]?.[billingCycle];
+      const priceId = STRIPE_PRICE_IDS[plan]?.[billingCycle];
       if (!priceId) return res.status(400).json({ message: `No price configured for ${plan}/${billingCycle}` });
 
-      const appUrl = process.env.APP_URL ? `https://${process.env.APP_URL}` : "https://plumboost.com";
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         mode: "subscription",
         payment_method_types: ["card"],
         line_items: [{ price: priceId, quantity: 1 }],
-        success_url: `${appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${appUrl}/billing`,
+        success_url: `${APP_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${APP_URL}/billing`,
         metadata: { orgId: org.id, plan, billing: billingCycle },
         subscription_data: { metadata: { orgId: org.id, plan, billing: billingCycle } },
         allow_promotion_codes: true,
@@ -481,10 +499,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!stripe) return res.status(503).json({ message: "Billing not configured" });
       const org = await storage.getOrgById(req.session.orgId!);
       if (!org?.stripeCustomerId) return res.status(400).json({ message: "No billing account found" });
-      const appUrl = process.env.APP_URL ? `https://${process.env.APP_URL}` : "https://plumboost.com";
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: org.stripeCustomerId,
-        return_url: `${appUrl}/billing`,
+        return_url: `${APP_URL}/billing`,
       });
       res.json({ url: portalSession.url });
     } catch (err: any) {
@@ -614,11 +631,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Tags ────────────────────────────────────────────────────────────────────
 
   app.get("/api/projects/:id/tags", requireOrgAccess, async (req, res) => {
+    const project = await storage.getProject(req.params.id as string);
+    if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
     res.json(await storage.getTags(req.params.id as string));
   });
 
   app.post("/api/projects/:id/tags", requireOrgAccess, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.id as string);
+      if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
       const parsed = insertTagSchema.parse({ ...req.body, projectId: req.params.id as string });
       res.json(await storage.createTag(parsed));
     } catch (err: any) {
@@ -634,11 +655,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Prompts ─────────────────────────────────────────────────────────────────
 
   app.get("/api/projects/:id/prompts", requireOrgAccess, async (req, res) => {
+    const project = await storage.getProject(req.params.id as string);
+    if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
     res.json(await storage.getPrompts(req.params.id as string));
   });
 
   app.post("/api/projects/:id/prompts", requireOrgAccess, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.id as string);
+      if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
       const parsed = insertPromptSchema.parse({ ...req.body, projectId: req.params.id as string });
       res.json(await storage.createPrompt(parsed));
     } catch (err: any) {
@@ -661,13 +686,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/projects/:id/prompts/bulk", requireOrgAccess, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.id as string);
+      if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
+
       const { lines, intent, tagId } = req.body as { lines: string[]; intent: string; tagId?: number | null };
       if (!Array.isArray(lines) || lines.length === 0) return res.status(400).json({ message: "No prompts provided" });
+
+      // Enforce plan prompt limit
+      const org = await storage.getOrgById(req.session.orgId!);
+      const existing = await storage.getPrompts(req.params.id as string);
+      const maxPrompts = org?.maxPrompts ?? PLAN_LIMITS.free.maxPrompts;
+      const validLines = lines.map((l) => l.trim()).filter(Boolean);
+      if (existing.length + validLines.length > maxPrompts) {
+        return res.status(403).json({
+          message: `Adding ${validLines.length} prompt(s) would exceed your plan limit of ${maxPrompts}. You have ${maxPrompts - existing.length} slot(s) remaining.`,
+        });
+      }
+
       const created: Prompt[] = [];
-      for (const text of lines) {
-        const trimmed = text.trim();
-        if (!trimmed) continue;
-        created.push(await storage.createPrompt({ projectId: req.params.id as string, text: trimmed, intent: intent || "informational", tagId: tagId ?? null, isActive: true }));
+      for (const text of validLines) {
+        created.push(
+          await storage.createPrompt({
+            projectId: req.params.id as string,
+            text,
+            intent: intent || "informational",
+            tagId: tagId ?? null,
+            isActive: true,
+          })
+        );
       }
       res.json({ created: created.length, prompts: created });
     } catch (err: any) {
@@ -678,11 +724,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Competitors ─────────────────────────────────────────────────────────────
 
   app.get("/api/projects/:id/competitors", requireOrgAccess, async (req, res) => {
+    const project = await storage.getProject(req.params.id as string);
+    if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
     res.json(await storage.getCompetitors(req.params.id as string));
   });
 
   app.post("/api/projects/:id/competitors", requireOrgAccess, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.id as string);
+      if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
       const parsed = insertCompetitorSchema.parse({ ...req.body, projectId: req.params.id as string });
       res.json(await storage.createCompetitor(parsed));
     } catch (err: any) {
@@ -698,6 +748,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Metrics ─────────────────────────────────────────────────────────────────
 
   app.get("/api/projects/:id/metrics", requireOrgAccess, async (req, res) => {
+    const project = await storage.getProject(req.params.id as string);
+    if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
     const days = parseInt(req.query.days as string) || 90;
     res.json(await storage.getDailyMetrics(req.params.id as string, days));
   });
@@ -705,11 +757,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Boost Actions ────────────────────────────────────────────────────────────
 
   app.get("/api/projects/:id/boost-actions", requireOrgAccess, async (req, res) => {
+    const project = await storage.getProject(req.params.id as string);
+    if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
     res.json(await storage.getBoostActions(req.params.id as string));
   });
 
   app.post("/api/projects/:id/boost-actions", requireOrgAccess, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.id as string);
+      if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
       const parsed = insertBoostActionSchema.parse({ ...req.body, projectId: req.params.id as string });
       res.json(await storage.createBoostAction(parsed));
     } catch (err: any) {
@@ -741,12 +797,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Citations ────────────────────────────────────────────────────────────────
 
   app.get("/api/projects/:id/citations", requireOrgAccess, async (req, res) => {
+    const project = await storage.getProject(req.params.id as string);
+    if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
     res.json(await storage.getCitations(req.params.id as string));
   });
 
   // ── Scans ────────────────────────────────────────────────────────────────────
 
-  app.post("/api/projects/:id/scan", requireOrgAccess, async (req, res) => {
+  app.post("/api/projects/:id/scan", requireOrgAccess, scanLimiter, async (req, res) => {
     try {
       const project = await storage.getProject(req.params.id as string);
       if (!project) return res.status(404).json({ message: "Project not found" });
@@ -758,6 +816,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const activePrompts = (await storage.getPrompts(req.params.id as string)).filter((p) => p.isActive);
       if (activePrompts.length === 0) return res.status(400).json({ message: "No active prompts to analyze" });
 
+      // Create the run first, then increment — if run creation fails we don't waste a scan
       const run = await storage.createAnalysisRun({
         projectId: req.params.id as string,
         status: "running",
@@ -766,6 +825,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         modelsUsed: ["ChatGPT", "Claude", "Google Gemini", "Grok"],
       });
 
+      // Increment only after run record exists
       await storage.incrementScanCount(req.session.orgId!);
 
       res.status(202).json({ ok: true, runId: run.id });
@@ -773,7 +833,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       runAnalysis(req.params.id as string, run.id).then(async () => {
         const user = await storage.getUserById(req.session.userId!);
         if (user) {
-          await sendScanCompleteEmail(user.email, user.name || "there", project.brandName, run.id).catch(() => {});
+          await sendScanCompleteEmail(user.email, user.name || "there", project.brandName, run.id)
+            .catch((err) => console.error("[email] scan complete email failed:", err));
         }
       }).catch((err) => {
         console.error("Background scan error:", err.message);
@@ -793,8 +854,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(run);
   });
 
-  app.get("/api/scans/:id/progress", (req, res) => {
+  app.get("/api/scans/:id/progress", requireAuth, async (req, res) => {
     const runId = parseInt(req.params.id as string);
+
+    // Verify the requesting user's org owns this scan run
+    const run = await storage.getAnalysisRun(runId);
+    if (!run) return res.status(404).json({ message: "Scan not found" });
+    const project = await storage.getProject(run.projectId);
+    if (!project || project.orgId !== req.session.orgId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -866,37 +936,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
 
-  // ── Auth profile aliases (frontend compatibility) ─────────────────────────
-  app.patch("/api/auth/profile", requireAuth, async (req, res) => {
-    try {
-      const { name, email } = req.body;
-      const updates: any = {};
-      if (name) updates.name = name;
-      if (email) updates.email = email.toLowerCase().trim();
-      const updatedUser = await storage.updateUser(req.session.userId!, updates);
-      res.json({ id: updatedUser.id, email: updatedUser.email, name: updatedUser.name });
-    } catch (err: any) {
-      res.status(400).json({ message: err.message });
-    }
-  });
-  app.post("/api/auth/change-password", requireAuth, async (req, res) => {
-    try {
-      const { currentPassword, newPassword } = req.body;
-      if (!newPassword || newPassword.length < 8) return res.status(400).json({ message: "New password must be at least 8 characters" });
-      const currentUser = await storage.getUserById(req.session.userId!);
-      if (!currentUser) return res.status(404).json({ message: "User not found" });
-      const valid = await bcrypt.compare(currentPassword, currentUser.passwordHash);
-      if (!valid) return res.status(401).json({ message: "Current password is incorrect" });
-      const passwordHash = await bcrypt.hash(newPassword, 10);
-      await storage.updateUser(currentUser.id, { passwordHash });
-      res.json({ ok: true });
-    } catch (err: any) {
-      res.status(400).json({ message: err.message });
-    }
-  });
   // ── Admin ────────────────────────────────────────────────────────────────────
 
-  const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "vipaymanshalaby@gmail.com").split(",").map((e) => e.trim().toLowerCase());
+  // ADMIN_EMAILS must be set via environment variable — no hardcoded fallback
+  const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
 
   async function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
     const user = await storage.getUserById(req.session.userId!);
