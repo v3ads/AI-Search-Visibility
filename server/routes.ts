@@ -17,7 +17,7 @@ import { scanEmitter, type ScanEvent } from "./scan-events";
 import { generateBoostActions } from "./boost-generator";
 import {
   sendWelcomeEmail, sendPasswordResetEmail, sendInvitationEmail,
-  sendScanCompleteEmail,
+  sendScanCompleteEmail, sendVerificationEmail,
 } from "./email";
 import { STRIPE_PRICE_IDS, APP_URL } from "./stripe-config";
 import { startDemoScan, getDemoScan } from "./demo-scan";
@@ -188,10 +188,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       req.session.userId = user.id;
       req.session.orgId = org.id;
       req.session.authenticated = true;
+      req.session.pendingVerification = true;
 
-      await sendWelcomeEmail(user.email, user.name || name, orgName).catch(() => {});
+      // Send verification email instead of welcome email
+      const verifyToken = randomBytes(32).toString("hex");
+      const verifyExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      await storage.createEmailVerificationToken(user.id, verifyToken, verifyExpiresAt);
+      await sendVerificationEmail(user.email, user.name || name, verifyToken).catch((err) =>
+        console.error("[email] verification email failed:", err)
+      );
 
-      res.status(201).json({ user: { id: user.id, email: user.email, name: user.name }, org });
+      res.status(201).json({ user: { id: user.id, email: user.email, name: user.name }, org, pendingVerification: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -246,9 +253,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const orgs = await storage.getOrgsForUser(user.id);
       const activeOrg = orgs.find((o) => o.id === req.session.orgId) || orgs[0] || null;
       res.json({
-        user: { id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl },
+        user: { id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, emailVerified: user.emailVerified },
         org: activeOrg,
         orgs,
+        pendingVerification: !user.emailVerified && !!req.session.pendingVerification,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -338,6 +346,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const org = await storage.getOrgById(invitation.orgId);
       res.json({ invitation, org });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Email Verification ──────────────────────────────────────────────────────
+
+  app.get("/api/auth/verify-email", async (req, res) => {
+    try {
+      const token = req.query.token as string;
+      if (!token) return res.status(400).json({ message: "Token required" });
+
+      const record = await storage.getEmailVerificationToken(token);
+      if (!record) return res.status(400).json({ message: "Invalid or expired verification link" });
+      if (new Date(record.expiresAt) < new Date()) {
+        return res.status(400).json({ message: "Verification link expired. Please request a new one." });
+      }
+
+      // Mark user as verified
+      await storage.updateUser(record.userId, { emailVerified: true });
+      await storage.deleteEmailVerificationToken(record.userId);
+
+      // Update session if user is logged in
+      if (req.session?.userId === record.userId) {
+        req.session.pendingVerification = false;
+      }
+
+      // Send welcome email now that they've verified
+      const user = await storage.getUserById(record.userId);
+      const orgs = user ? await storage.getOrgsForUser(record.userId) : [];
+      if (user && orgs[0]) {
+        await sendWelcomeEmail(user.email, user.name || "there", orgs[0].name).catch(() => {});
+      }
+
+      // Redirect to app — frontend will detect emailVerified=true
+      res.redirect(`${APP_URL}/?verified=true`);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/auth/resend-verification", async (req, res) => {
+    try {
+      // Works whether authenticated or not — just needs email
+      const email = req.body.email || (req.session?.userId
+        ? (await storage.getUserById(req.session.userId!))?.email
+        : null);
+
+      if (!email) return res.status(400).json({ message: "Email required" });
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) return res.json({ ok: true }); // Don't reveal if user exists
+
+      if (user.emailVerified) {
+        return res.status(400).json({ message: "Email already verified" });
+      }
+
+      const token = randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await storage.createEmailVerificationToken(user.id, token, expiresAt);
+      await sendVerificationEmail(user.email, user.name || "there", token).catch((err) =>
+        console.error("[email] resend verification failed:", err)
+      );
+
+      res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

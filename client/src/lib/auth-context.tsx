@@ -30,6 +30,7 @@ interface AuthContextValue {
   orgs: Org[];
   isLoading: boolean;
   isAuthenticated: boolean;
+  pendingVerification: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string, orgName: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [org, setOrg] = useState<Org | null>(null);
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingVerification, setPendingVerification] = useState(false);
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -53,15 +55,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data.user);
         setOrg(data.org);
         setOrgs(data.orgs || []);
+        setPendingVerification(!!data.pendingVerification);
       } else {
-        setUser(null);
-        setOrg(null);
-        setOrgs([]);
+        setUser(null); setOrg(null); setOrgs([]); setPendingVerification(false);
       }
     } catch {
-      setUser(null);
-      setOrg(null);
-      setOrgs([]);
+      setUser(null); setOrg(null); setOrgs([]); setPendingVerification(false);
     } finally {
       setIsLoading(false);
     }
@@ -103,13 +102,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
     setOrg(data.org);
     setOrgs([data.org]);
+    setPendingVerification(!!data.pendingVerification);
   };
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    setUser(null);
-    setOrg(null);
-    setOrgs([]);
+    setUser(null); setOrg(null); setOrgs([]); setPendingVerification(false);
   };
 
   const switchOrg = async (orgId: string) => {
@@ -128,16 +126,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        user,
-        org,
-        orgs,
-        isLoading,
+        user, org, orgs, isLoading,
         isAuthenticated: !!user,
-        login,
-        signup,
-        logout,
-        switchOrg,
-        refreshAuth,
+        pendingVerification,
+        login, signup, logout, switchOrg, refreshAuth,
       }}
     >
       {children}

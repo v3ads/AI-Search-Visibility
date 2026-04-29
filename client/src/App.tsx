@@ -21,6 +21,7 @@ import LandingPage from "@/pages/landing";
 import PrivacyPolicy from "@/pages/legal/privacy";
 import TermsOfService from "@/pages/legal/terms";
 import CookiePolicy from "@/pages/legal/cookies";
+import PendingVerificationPage from "@/pages/auth/pending-verification";
 import LoginPage from "@/pages/auth/login";
 import SignupPage from "@/pages/auth/signup";
 import ForgotPasswordPage from "@/pages/auth/forgot-password";
@@ -246,8 +247,15 @@ function AuthenticatedApp() {
 }
 
 function AppContent() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, pendingVerification, refreshAuth } = useAuth();
   const [location] = useLocation();
+
+  // Handle post-verification redirect — refresh auth to clear pendingVerification
+  useEffect(() => {
+    if (location.includes("verified=true")) {
+      refreshAuth();
+    }
+  }, [location, refreshAuth]);
 
   if (isLoading) {
     return (
@@ -274,6 +282,9 @@ function AppContent() {
   if (!isAuthenticated) {
     return <Redirect to="/login" />;
   }
+
+  // Authenticated but email not yet verified
+  if (pendingVerification) return <PendingVerificationPage />;
 
   return <AuthenticatedApp />;
 }

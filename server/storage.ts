@@ -2,6 +2,7 @@ import { eq, and, desc, gte, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, organizations, orgMembers, invitations, passwordResetTokens,
+  emailVerificationTokens,
   apiKeys, projects, tags, prompts, competitors, dailyMetrics,
   boostActions, citations, analysisRuns, scanSchedules,
   type User, type InsertUser, type Organization, type InsertOrg,
@@ -127,6 +128,23 @@ export async function getOrgInvitations(orgId: string): Promise<Invitation[]> {
 
 export async function deleteInvitation(id: number): Promise<void> {
   await db.delete(invitations).where(eq(invitations.id, id));
+}
+
+// ── Email Verification ────────────────────────────────────────────────────────
+
+export async function createEmailVerificationToken(userId: string, token: string, expiresAt: Date): Promise<void> {
+  // Delete any existing tokens for this user first
+  await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, userId));
+  await db.insert(emailVerificationTokens).values({ userId, token, expiresAt });
+}
+
+export async function getEmailVerificationToken(token: string) {
+  const [row] = await db.select().from(emailVerificationTokens).where(eq(emailVerificationTokens.token, token));
+  return row;
+}
+
+export async function deleteEmailVerificationToken(userId: string): Promise<void> {
+  await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, userId));
 }
 
 // ── Password Reset ────────────────────────────────────────────────────────────
@@ -456,6 +474,7 @@ export const storage = {
   addOrgMember, getOrgMembers, getOrgMember, removeOrgMember, updateOrgMemberRole,
   createInvitation, getInvitationByToken, acceptInvitation, getOrgInvitations, deleteInvitation,
   createPasswordResetToken, getPasswordResetToken, markPasswordResetTokenUsed,
+  createEmailVerificationToken, getEmailVerificationToken, deleteEmailVerificationToken,
   createApiKey, getApiKeyByHash, getOrgApiKeys, deleteApiKey, updateApiKeyLastUsed,
   createProject, getProject, getProjects, updateProject, deleteProject,
   getScanSchedule, upsertScanSchedule, getAllActiveScanSchedules,

@@ -285,6 +285,18 @@ async function migrate() {
       console.log("✓ password_reset_tokens table ready");
     }
 
+    // ── 5b. Create email_verification_tokens table ──────────────────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS email_verification_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+    console.log("✓ email_verification_tokens table ready");
+
     // ── 6. Create/fix api_keys table ───────────────────────────────────────
     const { rows: akIdSeqRows } = await pool.query(`
       SELECT column_default FROM information_schema.columns

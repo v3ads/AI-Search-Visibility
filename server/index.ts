@@ -20,6 +20,7 @@ declare module "express-session" {
     userId?: string;
     orgId?: string;
     authenticated?: boolean;
+    pendingVerification?: boolean;
   }
 }
 

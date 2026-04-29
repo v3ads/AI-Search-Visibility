@@ -74,20 +74,37 @@ function baseTemplate(content: string): string {
 </html>`;
 }
 
+export async function sendVerificationEmail(to: string, name: string, token: string): Promise<void> {
+  const verifyUrl = `${APP_URL}/verify-email?token=${token}`;
+  await sendEmail({
+    to: [{ email: to, name }],
+    subject: "Verify your PlumBoost email address",
+    htmlContent: baseTemplate(`
+      <h1>Verify your email, ${name}</h1>
+      <p>Thanks for signing up for PlumBoost. Click the button below to verify your email address and access your dashboard.</p>
+      <a href="${verifyUrl}" class="btn">Verify Email Address →</a>
+      <p style="font-size:13px;color:#525252">This link expires in 24 hours. If you didn't create a PlumBoost account, you can safely ignore this email.</p>
+      <hr>
+      <p style="font-size:12px;color:#525252">Can't click the button? Copy and paste this link into your browser:<br>
+      <span style="color:#a855f7;word-break:break-all">${verifyUrl}</span></p>
+    `),
+  });
+}
+
 export async function sendWelcomeEmail(to: string, name: string, orgName: string): Promise<void> {
   await sendEmail({
     to: [{ email: to, name }],
     subject: "Welcome to PlumBoost — let's run your first scan",
     htmlContent: baseTemplate(`
-      <h1>Welcome to PlumBoost, ${name}! 👋</h1>
-      <p>You've created your workspace <strong>${orgName}</strong>. You're now ready to see how your brand appears in ChatGPT, Claude, Gemini, and Grok.</p>
-      <p>Here's how to get started in 3 steps:</p>
+      <h1>You're verified, ${name}! 🎉</h1>
+      <p>Your workspace <strong>${orgName}</strong> is ready. Let's see how your brand appears in ChatGPT, Claude, Gemini, and Grok.</p>
+      <p>Get started in 3 steps:</p>
       <p>1. <strong>Create a project</strong> — add your domain and brand name<br>
          2. <strong>Add prompts</strong> — the questions your customers ask AI<br>
          3. <strong>Run your first scan</strong> — see your AI visibility score</p>
       <a href="${APP_URL}" class="btn">Go to Dashboard →</a>
       <hr>
-      <p style="font-size:13px">Your free plan includes 1 scan. Upgrade anytime to unlock unlimited scans, competitor tracking, and weekly reports.</p>
+      <p style="font-size:13px">Your free plan includes 1 scan. Upgrade anytime to unlock all 4 AI models, competitor tracking, and weekly reports.</p>
     `),
   });
 }

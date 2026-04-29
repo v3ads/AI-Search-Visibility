@@ -64,6 +64,15 @@ export const invitations = pgTable("invitations", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ── Email Verification Tokens ─────────────────────────────────────────────────
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // ── Password Reset Tokens ─────────────────────────────────────────────────────
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: serial("id").primaryKey(),
