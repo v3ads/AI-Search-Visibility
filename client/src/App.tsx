@@ -174,7 +174,12 @@ function ProjectRouter() {
         </Button>
         <CreateProjectWizard
           open={wizardOpen}
-          onClose={() => { setWizardOpen(false); setWizardPrefill(undefined); }}
+          onClose={() => {
+            setWizardOpen(false);
+            setWizardPrefill(undefined);
+            // Invalidate projects so the new project loads immediately
+            queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+          }}
           prefill={wizardPrefill}
         />
       </div>

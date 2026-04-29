@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ interface Props {
 export function CreateProjectWizard({ open, onClose, prefill }: Props) {
   const { createProject } = useProjectContext();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   // Start at step 2 if prefill data exists — user already did the demo
   const [step, setStep] = useState(prefill ? 2 : 1);
   const [loading, setLoading] = useState(false);
@@ -179,7 +181,10 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
       finally { setAddingPrompts(false); }
     }
     toast({ title: "Project created!", description: `${brandName} is ready to monitor.` });
+    const projectId = createdProjectId;
     handleClose();
+    // Navigate directly — don't wait for query cache to update
+    if (projectId) navigate(`/projects/${projectId}`);
   };
 
   const handleClose = () => {
