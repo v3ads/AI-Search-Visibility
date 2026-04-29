@@ -292,7 +292,12 @@ function DemoSection() {
                 ? `${brand} appears in some AI responses but has real room to grow. Your full Boost Plan is ready — sign up free to unlock it.`
                 : `${brand} isn't appearing in AI responses yet. That's actually good news — your Boost Plan will show you exactly how to fix it.`}
             </p>
-            <button className="pb-btn-primary pb-btn-full" onClick={() => navigate("/signup")}>
+            <button className="pb-btn-primary pb-btn-full" onClick={() => {
+              if (brand && domain) {
+                sessionStorage.setItem('plumboost_demo', JSON.stringify({ brand, domain, industry }));
+              }
+              navigate("/signup");
+            }}>
               Unlock Full Report — Free
             </button>
             <button className="pb-btn-ghost" style={{ width: "100%", marginTop: 8 }} onClick={() => { setStep("idle"); setBrand(""); setDomain(""); setResult(null); }}>

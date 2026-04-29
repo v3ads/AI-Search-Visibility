@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,18 +24,23 @@ const COUNTRIES = [
   { value: "AE", label: "UAE" }, { value: "OTHER", label: "Other" },
 ];
 
-interface Props { open: boolean; onClose: () => void; }
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  prefill?: { brand: string; domain: string; industry: string };
+}
 
-export function CreateProjectWizard({ open, onClose }: Props) {
+export function CreateProjectWizard({ open, onClose, prefill }: Props) {
   const { createProject } = useProjectContext();
   const { toast } = useToast();
-  const [step, setStep] = useState(1);
+  // Start at step 2 if prefill data exists — user already did the demo
+  const [step, setStep] = useState(prefill ? 2 : 1);
   const [loading, setLoading] = useState(false);
 
-  // Step 1 — Brand basics
-  const [domain, setDomain] = useState("");
-  const [brandName, setBrandName] = useState("");
-  const [industry, setIndustry] = useState("");
+  // Step 1 — Brand basics (pre-filled from demo if available)
+  const [domain, setDomain] = useState(prefill?.domain ?? "");
+  const [brandName, setBrandName] = useState(prefill?.brand ?? "");
+  const [industry, setIndustry] = useState(prefill?.industry ?? "");
   const [country, setCountry] = useState("US");
 
   // Step 2 — Competitors
@@ -51,7 +56,12 @@ export function CreateProjectWizard({ open, onClose }: Props) {
   const [loadingPrompts, setLoadingPrompts] = useState(false);
   const [addingPrompts, setAddingPrompts] = useState(false);
 
-  // ── Competitor helpers ────────────────────────────────────────────────────────
+  // Auto-fetch competitors when wizard opens with prefill (step 1 is skipped)
+  useEffect(() => {
+    if (open && prefill && step === 2 && suggestions.length === 0 && !loadingSuggestions) {
+      fetchCompetitorSuggestions();
+    }
+  }, [open]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchCompetitorSuggestions = async () => {
     setLoadingSuggestions(true);
@@ -173,7 +183,11 @@ export function CreateProjectWizard({ open, onClose }: Props) {
   };
 
   const handleClose = () => {
-    setStep(1); setDomain(""); setBrandName(""); setIndustry(""); setCountry("US");
+    setStep(prefill ? 2 : 1);
+    setDomain(prefill?.domain ?? "");
+    setBrandName(prefill?.brand ?? "");
+    setIndustry(prefill?.industry ?? "");
+    setCountry("US");
     setCompetitors([]); setCompetitorInput(""); setSuggestions([]); setLoadingSuggestions(false);
     setCreatedProjectId(null); setPromptSuggestions([]); setSelectedPrompts(new Set());
     setLoadingPrompts(false); setAddingPrompts(false);
@@ -181,8 +195,11 @@ export function CreateProjectWizard({ open, onClose }: Props) {
   };
 
   const canProceedStep1 = domain.trim() && brandName.trim();
-  const TOTAL_STEPS = 3;
-  const progressPct = step === 1 ? 33 : step === 2 ? 66 : 100;
+  const TOTAL_STEPS = prefill ? 2 : 3;
+  const progressPct = prefill
+    ? (step === 2 ? 50 : 100)
+    : (step === 1 ? 33 : step === 2 ? 66 : 100);
+  const displayStep = prefill ? step - 1 : step;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
@@ -190,16 +207,21 @@ export function CreateProjectWizard({ open, onClose }: Props) {
         <DialogHeader>
           <div className="flex items-center gap-2 mb-1">
             <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-xs text-muted-foreground font-medium">Step {step} of {TOTAL_STEPS}</span>
+            <span className="text-xs text-muted-foreground font-medium">Step {displayStep} of {TOTAL_STEPS}</span>
           </div>
           <DialogTitle className="text-xl">
-            {step === 1 ? "Set up your brand" : step === 2 ? "Add competitors" : "AI-suggested prompts"}
+            {step === 1 ? "Set up your brand"
+              : step === 2
+              ? prefill ? `Continuing your scan for ${prefill.brand}` : "Add competitors"
+              : "AI-suggested prompts"}
           </DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
             {step === 1
               ? "Tell us about the brand you want to monitor in AI search results."
               : step === 2
-              ? "Add the brands you compete with. We'll track their AI visibility alongside yours."
+              ? prefill
+                ? `We've pre-filled your details from the demo. Add competitors to track alongside ${prefill.brand}.`
+                : "Add the brands you compete with. We'll track their AI visibility alongside yours."
               : "We analysed your website and generated prompts your customers actually use."}
           </p>
         </DialogHeader>
@@ -319,9 +341,13 @@ export function CreateProjectWizard({ open, onClose }: Props) {
             )}
 
             <div className="flex justify-between pt-2">
-              <Button variant="ghost" onClick={() => setStep(1)}>
-                <ChevronLeft className="w-4 h-4 mr-1" /> Back
-              </Button>
+              {prefill ? (
+                <div /> // No back button when coming from demo — step 1 is pre-filled
+              ) : (
+                <Button variant="ghost" onClick={() => setStep(1)}>
+                  <ChevronLeft className="w-4 h-4 mr-1" /> Back
+                </Button>
+              )}
               <Button onClick={handleCreate} disabled={loading}>
                 {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</> : <>Create Project <ChevronRight className="w-4 h-4 ml-1" /></>}
               </Button>

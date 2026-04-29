@@ -36,7 +36,9 @@ export default function SignupPage() {
     setLoading(true);
     try {
       await signup(form.email, form.password, form.name, form.orgName);
-      navigate("/");
+      // If user came from demo scan, restore context in the app
+      const demoData = sessionStorage.getItem("plumboost_demo");
+      navigate(demoData ? "/?demo=restore" : "/");
     } catch (err: any) {
       setError(err.message || "Signup failed");
     } finally {

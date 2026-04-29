@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -122,8 +122,26 @@ function AppHeader() {
 function ProjectRouter() {
   const { activeProjectId, projects, isLoading } = useProjectContext();
   const { org } = useAuth();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardPrefill, setWizardPrefill] = useState<{ brand: string; domain: string; industry: string } | undefined>();
+
+  // Detect post-demo signup redirect and restore context
+  useEffect(() => {
+    if (location.includes("demo=restore") && !isLoading && projects.length === 0) {
+      try {
+        const raw = sessionStorage.getItem("plumboost_demo");
+        if (raw) {
+          const data = JSON.parse(raw);
+          setWizardPrefill({ brand: data.brand || "", domain: data.domain || "", industry: data.industry || "" });
+          sessionStorage.removeItem("plumboost_demo");
+        }
+      } catch { /* malformed data — ignore */ }
+      setWizardOpen(true);
+      // Clean the URL without a full reload
+      navigate("/", { replace: true });
+    }
+  }, [location, isLoading, projects.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) {
     return (
@@ -140,15 +158,24 @@ function ProjectRouter() {
           <Zap className="w-8 h-8 text-primary" />
         </div>
         <div>
-          <h2 className="text-xl font-semibold">Welcome to PlumBoost</h2>
+          <h2 className="text-xl font-semibold">
+            {wizardPrefill ? `Welcome! Let's set up ${wizardPrefill.brand}` : "Welcome to PlumBoost"}
+          </h2>
           <p className="text-muted-foreground text-sm mt-1 max-w-sm">
-            Create your first project to start monitoring your brand's AI search visibility across ChatGPT, Claude, Gemini, and Grok.
+            {wizardPrefill
+              ? `We've pulled your details from the demo scan. Add competitors and we'll generate your first full scan.`
+              : "Create your first project to start monitoring your brand's AI search visibility across ChatGPT, Claude, Gemini, and Grok."}
           </p>
         </div>
         <Button onClick={() => setWizardOpen(true)}>
-          <Zap className="w-4 h-4 mr-2" />Create Your First Project
+          <Zap className="w-4 h-4 mr-2" />
+          {wizardPrefill ? `Continue Setting Up ${wizardPrefill.brand}` : "Create Your First Project"}
         </Button>
-        <CreateProjectWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
+        <CreateProjectWizard
+          open={wizardOpen}
+          onClose={() => { setWizardOpen(false); setWizardPrefill(undefined); }}
+          prefill={wizardPrefill}
+        />
       </div>
     );
   }
