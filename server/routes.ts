@@ -78,7 +78,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 async function requireEmailVerified(req: Request, res: Response, next: NextFunction) {
   if (!req.session?.userId) return next();
   // Allow verification/resend endpoints through
-  const allowed = ["/api/auth/verify-email", "/api/auth/resend-verification", "/api/auth/logout", "/api/auth/me"];
+  const allowed = ["/auth/verify-email", "/auth/resend-verification", "/auth/logout", "/auth/me", "/auth/forgot-password", "/auth/reset-password", "/auth/accept-invite"];
   if (allowed.some((p) => req.path.startsWith(p))) return next();
   const user = await storage.getUserById(req.session.userId);
   if (!user?.emailVerified) {

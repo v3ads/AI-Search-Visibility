@@ -262,7 +262,7 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Country</Label>
-              <Select value={detailsForm.country} onValueChange={(v) => setDetailsForm({ ...detailsForm, country: v })}>
+              <Select value={detailsForm.country || "US"} onValueChange={(v) => setDetailsForm({ ...detailsForm, country: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {COUNTRIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}

@@ -40,12 +40,17 @@ export function startScanScheduler(): void {
           if (activePrompts.length === 0) {
             log(`No active prompts for project ${schedule.projectId}, skipping`, "scheduler");
           } else {
+            const isPaidPlan = org.plan && org.plan !== "free";
+            const modelsToUse = isPaidPlan || org.hasAllModels
+              ? ["ChatGPT", "Claude", "Google Gemini", "Grok"]
+              : ["ChatGPT", "Claude"];
+
             const run = await storage.createAnalysisRun({
               projectId: schedule.projectId,
               status: "running",
-              totalPrompts: activePrompts.length * 4,
+              totalPrompts: activePrompts.length * modelsToUse.length,
               completedPrompts: 0,
-              modelsUsed: ["ChatGPT", "Claude", "Google Gemini", "Grok"],
+              modelsUsed: modelsToUse,
             });
 
             await storage.incrementScanCount(project.orgId);

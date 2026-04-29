@@ -67,7 +67,7 @@ function baseTemplate(content: string): string {
       ${content}
     </div>
     <div class="footer">PlumBoost · AI Search Visibility Platform<br>
-      <a href="${APP_URL}/unsubscribe" style="color:#525252">Unsubscribe</a>
+      <a href="mailto:hello@plumboost.com?subject=Unsubscribe" style="color:#525252">Unsubscribe</a>
     </div>
   </div>
 </body>

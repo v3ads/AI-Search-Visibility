@@ -7,6 +7,10 @@
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions";
 const TIMEOUT_MS = 60_000;
 
+if (!process.env.OPENROUTER_API_KEY && process.env.NODE_ENV === "production") {
+  console.error("[openrouter] FATAL: OPENROUTER_API_KEY is not set");
+}
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -23,6 +27,10 @@ export async function callOpenRouter(
   options: OpenRouterOptions = {}
 ): Promise<string> {
   const { maxTokens = 2048, temperature = 0.7 } = options;
+
+  if (!process.env.OPENROUTER_API_KEY) {
+    throw new Error("OPENROUTER_API_KEY is not configured — cannot call AI models");
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
