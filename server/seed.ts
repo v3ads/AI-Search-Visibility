@@ -50,14 +50,28 @@ export async function seedDatabase() {
   }
 
   // ── Admin org ──────────────────────────────────────────────────────────────
+  // Always upsert admin org with enterprise plan and all features unlocked (no payment required)
   let [adminOrg] = await db.select().from(organizations).where(eq(organizations.id, ADMIN_ORG_ID));
   if (!adminOrg) {
     [adminOrg] = await db.insert(organizations).values({
-      id: ADMIN_ORG_ID, name: "v3ads", slug: "v3ads", plan: "agency",
-      maxProjects: 25, maxCompetitors: 999, maxPrompts: 999, maxScansPerMonth: 999,
+      id: ADMIN_ORG_ID, name: "v3ads", slug: "v3ads", plan: "enterprise",
+      maxProjects: 9999, maxCompetitors: 9999, maxPrompts: 9999, maxScansPerMonth: 9999,
       hasApiAccess: true, hasWhiteLabel: true, hasScheduledScans: true,
+      subscriptionStatus: "active",
     }).returning();
-    console.log("[seed] Created v3ads org");
+    console.log("[seed] Created v3ads org with enterprise plan");
+  } else {
+    // Force-update to enterprise plan with all features on every deploy
+    [adminOrg] = await db.update(organizations)
+      .set({
+        plan: "enterprise",
+        maxProjects: 9999, maxCompetitors: 9999, maxPrompts: 9999, maxScansPerMonth: 9999,
+        hasApiAccess: true, hasWhiteLabel: true, hasScheduledScans: true,
+        subscriptionStatus: "active",
+      })
+      .where(eq(organizations.id, ADMIN_ORG_ID))
+      .returning();
+    console.log("[seed] Updated v3ads org to enterprise plan with all features unlocked");
   }
   const [adminOrgMember] = await db.select().from(orgMembers).where(
     and(eq(orgMembers.orgId, ADMIN_ORG_ID), eq(orgMembers.userId, adminUser.id))
