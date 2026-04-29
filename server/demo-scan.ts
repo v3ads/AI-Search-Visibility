@@ -27,11 +27,12 @@ async function getDemoPrompts(
   // Only crawl if FIRECRAWL_API_KEY is set
   if (process.env.FIRECRAWL_API_KEY) {
     try {
-      const { prompts, siteContext } = await getSitePrompts(domain, brandName, 2);
+      const { prompts, siteContext } = await getSitePrompts(domain, brandName, 2, false);
       if (prompts.length >= 2) {
-        const note = siteContext.location
-          ? `${siteContext.category} in ${siteContext.location}`
-          : siteContext.category;
+        const locationParts = [siteContext.neighborhood, siteContext.location].filter(Boolean);
+        const note = locationParts.length > 0
+          ? `${siteContext.subcategory || siteContext.category} in ${locationParts.join(", ")}`
+          : siteContext.subcategory || siteContext.category;
         return { prompts, contextNote: note };
       }
     } catch (err: any) {
@@ -48,13 +49,14 @@ export interface DemoScanResult {
   status: "running" | "complete" | "failed";
   brandName: string;
   domain: string;
+  promptsUsed?: string[];      // shown to user for transparency
   progress: { model: string; done: boolean; error?: boolean }[];
   result?: {
     visibilityPct: number;
     sovPct: number;
     sentimentScore: number;
     avgRank: number;
-    mentionedBy: string[];  // which models mentioned the brand
+    mentionedBy: string[];
   };
   error?: string;
   createdAt: number;
@@ -112,6 +114,10 @@ export async function startDemoScan(
       `I'm looking for recommendations in ${safe.industry} — what do you suggest?`,
     ];
   }
+
+  // Update scan with the prompts now that we have them
+  scan.promptsUsed = prompts;
+  demoResults.set(id, { ...scan });
 
   // Per-model accumulators
   const acc: Record<string, { visibility: number; total: number; ranks: number[]; sentiments: number[] }> = {};

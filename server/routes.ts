@@ -763,7 +763,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let prompts: string[] = [];
       if (process.env.FIRECRAWL_API_KEY && project.domain) {
         try {
-          const result = await getSitePrompts(project.domain, project.brandName, count);
+          const result = await getSitePrompts(project.domain, project.brandName, count, true);
           prompts = result.prompts;
         } catch (err: any) {
           console.error("[prompt-suggest] Firecrawl failed:", err.message);

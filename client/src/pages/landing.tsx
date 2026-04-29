@@ -118,6 +118,7 @@ function DemoSection() {
     visibilityPct: number; sovPct: number; sentimentScore: number;
     avgRank: number; mentionedBy: string[];
   } | null>(null);
+  const [promptsUsed, setPromptsUsed] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -165,6 +166,7 @@ function DemoSection() {
           if (scan.status === "complete" && scan.result) {
             stopPolling();
             setResult(scan.result);
+            if (scan.promptsUsed) setPromptsUsed(scan.promptsUsed);
             setStep("result");
           } else if (scan.status === "failed") {
             stopPolling();
@@ -251,6 +253,17 @@ function DemoSection() {
                 : "ChatGPT + Claude scanned"}
             </span>
           </div>
+
+          {promptsUsed.length > 0 && (
+            <div style={{ marginBottom: 14, padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)" }}>
+              <p style={{ fontSize: 10, color: "#475569", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'IBM Plex Mono',monospace", marginBottom: 6 }}>Prompts used in this scan</p>
+              {promptsUsed.map((p, i) => (
+                <p key={i} style={{ fontSize: 12, color: "#64748B", lineHeight: 1.5, marginBottom: i < promptsUsed.length - 1 ? 4 : 0 }}>
+                  <span style={{ color: "#374151", marginRight: 4 }}>{i + 1}.</span>{p}
+                </p>
+              ))}
+            </div>
+          )}
           <div className="pb-metrics-grid">
             <div className="pb-metric-tile">
               <div className="pb-metric-value" style={{ color: "#A855F7" }}>{result.visibilityPct}%</div>
@@ -265,8 +278,8 @@ function DemoSection() {
               <div className="pb-metric-label">Sentiment Score</div>
             </div>
             <div className="pb-metric-tile">
-              <div className="pb-metric-value" style={{ color: "#22c55e" }}>
-                {result.avgRank > 0 ? `#${result.avgRank}` : "—"}
+              <div className="pb-metric-value" style={{ color: result.avgRank > 0 ? "#22c55e" : "#475569", fontSize: result.avgRank > 0 ? undefined : 18 }}>
+                {result.avgRank > 0 ? `#${result.avgRank}` : "Not ranked"}
               </div>
               <div className="pb-metric-label">Avg AI Ranking</div>
             </div>
@@ -300,7 +313,7 @@ function DemoSection() {
             }}>
               Unlock Full Report — Free
             </button>
-            <button className="pb-btn-ghost" style={{ width: "100%", marginTop: 8 }} onClick={() => { setStep("idle"); setBrand(""); setDomain(""); setResult(null); }}>
+            <button className="pb-btn-ghost" style={{ width: "100%", marginTop: 8 }} onClick={() => { setStep("idle"); setBrand(""); setDomain(""); setResult(null); setPromptsUsed([]); }}>
               Try another brand
             </button>
           </div>
