@@ -494,6 +494,20 @@ async function migrate() {
       }
     }
 
+    // ── 12. Ensure session table exists (for connect-pg-simple) ──────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "session" (
+        "sid" varchar NOT NULL COLLATE "default",
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL,
+        CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
+      ) WITH (OIDS=FALSE)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire")
+    `);
+    console.log("✓ session table ready");
+
     console.log("\n✅ Migration completed successfully!");
   } catch (err) {
     console.error("Migration failed:", err);

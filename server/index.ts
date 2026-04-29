@@ -40,7 +40,10 @@ app.use(
   session({
     store: new PgStore({
       conString: process.env.DATABASE_URL,
-      createTableIfMissing: true,
+      // Session table is created by migrate.ts pre-deploy command
+      // Setting createTableIfMissing: false avoids the ENOENT error caused by
+      // esbuild bundling connect-pg-simple without its table.sql asset file
+      createTableIfMissing: false,
     }),
     secret: process.env.SESSION_SECRET || "fallback-dev-secret",
     resave: false,
