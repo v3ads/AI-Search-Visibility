@@ -17,6 +17,10 @@ import { Badge } from "@/components/ui/badge";
 import { LogOut, User, CreditCard, Users, ShieldAlert, Zap } from "lucide-react";
 import { CreateProjectWizard } from "@/components/create-project-wizard";
 import NotFound from "@/pages/not-found";
+import LandingPage from "@/pages/landing";
+import PrivacyPolicy from "@/pages/legal/privacy";
+import TermsOfService from "@/pages/legal/terms";
+import CookiePolicy from "@/pages/legal/cookies";
 import LoginPage from "@/pages/auth/login";
 import SignupPage from "@/pages/auth/signup";
 import ForgotPasswordPage from "@/pages/auth/forgot-password";
@@ -232,6 +236,12 @@ function AppContent() {
   if (location === "/forgot-password") return <ForgotPasswordPage />;
   if (location === "/reset-password") return <ResetPasswordPage />;
   if (location === "/accept-invite") return <AcceptInvitePage />;
+  if (location === "/privacy") return <PrivacyPolicy />;
+  if (location === "/terms") return <TermsOfService />;
+  if (location === "/cookies") return <CookiePolicy />;
+
+  // Landing page — show to unauthenticated users at root
+  if (!isAuthenticated && location === "/") return <LandingPage />;
 
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
