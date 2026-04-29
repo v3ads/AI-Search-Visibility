@@ -77,7 +77,7 @@ export default function SettingsPage() {
     setDetailsForm({
       domain: project.domain,
       brandName: project.brandName,
-      industry: project.industry || "",
+      industry: project.industry || "none",
       country: project.country || "US",
     });
     setEditingDetails(true);
@@ -90,7 +90,7 @@ export default function SettingsPage() {
       await updateProject(projectId, {
         domain: detailsForm.domain.trim().replace(/^https?:\/\//, "").replace(/\/$/, ""),
         brandName: detailsForm.brandName.trim(),
-        industry: detailsForm.industry || null,
+        industry: detailsForm.industry && detailsForm.industry !== "none" ? detailsForm.industry : null,
         country: detailsForm.country,
       });
       setEditingDetails(false);
@@ -271,9 +271,10 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Industry</Label>
-              <Select value={detailsForm.industry} onValueChange={(v) => setDetailsForm({ ...detailsForm, industry: v })}>
+              <Select value={detailsForm.industry || "none"} onValueChange={(v) => setDetailsForm({ ...detailsForm, industry: v })}>
                 <SelectTrigger><SelectValue placeholder="Select industry" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">Not set</SelectItem>
                   {INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}
                 </SelectContent>
               </Select>

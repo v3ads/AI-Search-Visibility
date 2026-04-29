@@ -36,7 +36,7 @@ export default function TeamPage() {
 
   const inviteMutation = useMutation({
     mutationFn: (data: { email: string; role: string }) =>
-      fetch("/api/org/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(async (r) => {
+      fetch("/api/org/invitations", { credentials: "include", method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(async (r) => {
         if (!r.ok) throw new Error((await r.json()).message);
         return r.json();
       }),
@@ -51,19 +51,19 @@ export default function TeamPage() {
 
   const removeMutation = useMutation({
     mutationFn: (userId: number) =>
-      fetch(`/api/org/members/${userId}`, { method: "DELETE" }).then((r) => { if (!r.ok) throw new Error("Failed"); }),
+      fetch(`/api/org/members/${userId}`, { credentials: "include", method: "DELETE" }).then((r) => { if (!r.ok) throw new Error("Failed"); }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/org/members"] }); toast({ title: "Member removed" }); },
   });
 
   const roleChangeMutation = useMutation({
     mutationFn: ({ userId, role }: { userId: number; role: string }) =>
-      fetch(`/api/org/members/${userId}/role`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }) }).then((r) => { if (!r.ok) throw new Error("Failed"); }),
+      fetch(`/api/org/members/${userId}`, { credentials: "include", method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }) }).then((r) => { if (!r.ok) throw new Error("Failed"); }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/org/members"] }); },
   });
 
   const revokeInviteMutation = useMutation({
     mutationFn: (id: number) =>
-      fetch(`/api/org/invitations/${id}`, { method: "DELETE" }).then((r) => { if (!r.ok) throw new Error("Failed"); }),
+      fetch(`/api/org/invitations/${id}`, { credentials: "include", method: "DELETE" }).then((r) => { if (!r.ok) throw new Error("Failed"); }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/org/invitations"] }); },
   });
 

@@ -42,7 +42,7 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
   // Step 1 — Brand basics (pre-filled from demo if available)
   const [domain, setDomain] = useState(prefill?.domain ?? "");
   const [brandName, setBrandName] = useState(prefill?.brand ?? "");
-  const [industry, setIndustry] = useState(prefill?.industry ?? "");
+  const [industry, setIndustry] = useState(prefill?.industry || "none");
   const [country, setCountry] = useState("US");
 
   // Step 2 — Competitors
@@ -69,11 +69,10 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
     setLoadingSuggestions(true);
     setSuggestions([]);
     try {
-      const res = await fetch("/api/suggest-competitors", {
+      const res = await fetch("/api/suggest-competitors", { credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ brandName: brandName.trim(), domain: domain.trim(), industry }),
+                body: JSON.stringify({ brandName: brandName.trim(), domain: domain.trim(), industry: industry === "none" ? "" : industry }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -108,7 +107,7 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
       const project = await createProject({
         domain: domain.trim().replace(/^https?:\/\//, "").replace(/\/$/, ""),
         brandName: brandName.trim(),
-        industry: industry || null,
+        industry: (industry && industry !== "none") ? industry : null,
         country,
         language: "en",
       });
@@ -117,10 +116,9 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
       if (competitors.length > 0) {
         await Promise.all(
           competitors.map((name) =>
-            fetch(`/api/projects/${project.id}/competitors`, {
+            fetch(`/api/projects/${project.id}/competitors`, { credentials: "include",
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              credentials: "include",
               body: JSON.stringify({ brandName: name }),
             })
           )
@@ -133,10 +131,9 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
       // Fetch AI-generated prompt suggestions in background
       setLoadingPrompts(true);
       try {
-        const res = await fetch(`/api/projects/${project.id}/prompts/suggest`, {
+        const res = await fetch(`/api/projects/${project.id}/prompts/suggest`, { credentials: "include",
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
           body: JSON.stringify({}),
         });
         if (res.ok) {
@@ -168,10 +165,9 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
     if (addPrompts && selectedPrompts.size > 0 && createdProjectId) {
       setAddingPrompts(true);
       try {
-        const res = await fetch(`/api/projects/${createdProjectId}/prompts/bulk`, {
+        const res = await fetch(`/api/projects/${createdProjectId}/prompts/bulk`, { credentials: "include",
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
           body: JSON.stringify({
             lines: Array.from(selectedPrompts),
             intent: "informational",
@@ -197,7 +193,7 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
     setStep(prefill ? 2 : 1);
     setDomain(prefill?.domain ?? "");
     setBrandName(prefill?.brand ?? "");
-    setIndustry(prefill?.industry ?? "");
+    setIndustry(prefill?.industry || "none");
     setCountry("US");
     setCompetitors([]); setCompetitorInput(""); setSuggestions([]); setLoadingSuggestions(false);
     setCreatedProjectId(null); setPromptSuggestions([]); setSelectedPrompts(new Set());
@@ -265,7 +261,7 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Industry</Label>
-                <Select value={industry} onValueChange={setIndustry}>
+                <Select value={industry || "none"} onValueChange={setIndustry}>
                   <SelectTrigger><SelectValue placeholder="Select industry" /></SelectTrigger>
                   <SelectContent>
                     {INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}

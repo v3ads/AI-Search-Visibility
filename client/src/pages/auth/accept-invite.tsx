@@ -34,7 +34,7 @@ export default function AcceptInvitePage() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/accept-invite", {
+      const res = await fetch("/api/auth/accept-invite", { credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, name: form.name, password: form.password }),

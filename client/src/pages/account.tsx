@@ -28,7 +28,7 @@ export default function AccountPage() {
     setProfileError("");
     setProfileLoading(true);
     try {
-      const res = await fetch("/api/auth/profile", {
+      const res = await fetch("/api/user/profile", { credentials: "include",
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profileForm),
@@ -50,7 +50,7 @@ export default function AccountPage() {
     if (passwordForm.newPass.length < 8) { setPasswordError("Password must be at least 8 characters"); return; }
     setPasswordLoading(true);
     try {
-      const res = await fetch("/api/auth/change-password", {
+      const res = await fetch("/api/user/change-password", { credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword: passwordForm.current, newPassword: passwordForm.newPass }),
@@ -69,7 +69,7 @@ export default function AccountPage() {
     e.preventDefault();
     setOrgLoading(true);
     try {
-      const res = await fetch("/api/org", {
+      const res = await fetch("/api/org", { credentials: "include",
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: orgForm.name }),

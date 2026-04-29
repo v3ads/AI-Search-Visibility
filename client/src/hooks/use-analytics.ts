@@ -37,8 +37,8 @@ export function useMetricsData(days: DateRange = 30) {
   return useQuery<DailyMetric[]>({
     queryKey: ["/api/projects", activeProjectId, "metrics", days],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${activeProjectId}/metrics?days=${days}`, {
-        credentials: "include",
+      const res = await fetch(`/api/projects/${activeProjectId}/metrics?days=${days}`, { credentials: "include",
+        
       });
       if (!res.ok) throw new Error("Failed to fetch metrics");
       return res.json();

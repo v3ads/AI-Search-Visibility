@@ -61,7 +61,7 @@ export default function BillingPage() {
     if (planId === currentPlan) return;
     setUpgrading(planId);
     try {
-      const res = await fetch("/api/billing/checkout", {
+      const res = await fetch("/api/billing/checkout", { credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: planId }),
@@ -82,7 +82,7 @@ export default function BillingPage() {
   const handleManageBilling = async () => {
     setOpeningPortal(true);
     try {
-      const res = await fetch("/api/billing/portal", { method: "POST" });
+      const res = await fetch("/api/billing/portal", { credentials: "include", method: "POST" });
       if (!res.ok) throw new Error("Failed to open billing portal");
       const { url } = await res.json();
       window.open(url, "_blank");
