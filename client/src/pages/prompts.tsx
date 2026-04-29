@@ -37,7 +37,7 @@ function PromptRow({
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(prompt.text);
   const [editIntent, setEditIntent] = useState(prompt.intent);
-  const [editTagId, setEditTagId] = useState<string>(prompt.tagId?.toString() ?? "");
+  const [editTagId, setEditTagId] = useState<string>(prompt.tagId?.toString() ?? "none");
   const [saving, setSaving] = useState(false);
 
   const tag = prompt.tagId ? tags.find((t) => t.id === prompt.tagId) : null;
@@ -61,7 +61,7 @@ function PromptRow({
       await apiRequest("PATCH", `/api/prompts/${prompt.id}`, {
         text: editText.trim(),
         intent: editIntent,
-        tagId: editTagId ? parseInt(editTagId) : null,
+        tagId: editTagId && editTagId !== "none" ? parseInt(editTagId) : null,
       });
       invalidate();
       setEditing(false);
@@ -86,7 +86,7 @@ function PromptRow({
   const cancelEdit = () => {
     setEditText(prompt.text);
     setEditIntent(prompt.intent);
-    setEditTagId(prompt.tagId?.toString() ?? "");
+    setEditTagId(prompt.tagId?.toString() ?? "none");
     setEditing(false);
   };
 
@@ -120,7 +120,7 @@ function PromptRow({
                 <SelectValue placeholder="No tag" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="" className="text-xs">No tag</SelectItem>
+                <SelectItem value="none" className="text-xs">No tag</SelectItem>
                 {tags.map((t) => (
                   <SelectItem key={t.id} value={t.id.toString()} className="text-xs">
                     <span className="flex items-center gap-1.5">
@@ -200,7 +200,7 @@ function BulkImportDialog({
   const { toast } = useToast();
   const [rawText, setRawText] = useState("");
   const [intent, setIntent] = useState("informational");
-  const [tagId, setTagId] = useState("");
+  const [tagId, setTagId] = useState("none");
   const [importing, setImporting] = useState(false);
 
   const lines = rawText.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -212,7 +212,7 @@ function BulkImportDialog({
       const res = await apiRequest("POST", `/api/projects/${projectId}/prompts/bulk`, {
         lines,
         intent,
-        tagId: tagId ? parseInt(tagId) : null,
+        tagId: tagId && tagId !== "none" ? parseInt(tagId) : null,
       });
       const data = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "prompts"] });
@@ -263,7 +263,7 @@ function BulkImportDialog({
               <Select value={tagId} onValueChange={setTagId}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="No tag" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="" className="text-xs">No tag</SelectItem>
+                  <SelectItem value="none" className="text-xs">No tag</SelectItem>
                   {tags.map((t) => (
                     <SelectItem key={t.id} value={t.id.toString()} className="text-xs">
                       <span className="flex items-center gap-1.5">
@@ -296,7 +296,7 @@ function AddPromptDialog({
   const { toast } = useToast();
   const [text, setText] = useState("");
   const [intent, setIntent] = useState("informational");
-  const [tagId, setTagId] = useState("");
+  const [tagId, setTagId] = useState("none");
   const [saving, setSaving] = useState(false);
 
   const handleCreate = async () => {
@@ -306,7 +306,7 @@ function AddPromptDialog({
       await apiRequest("POST", `/api/projects/${projectId}/prompts`, {
         text: text.trim(),
         intent,
-        tagId: tagId ? parseInt(tagId) : null,
+        tagId: tagId && tagId !== "none" ? parseInt(tagId) : null,
         isActive: true,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "prompts"] });
@@ -358,7 +358,7 @@ function AddPromptDialog({
               <Select value={tagId} onValueChange={setTagId}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="No tag" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="" className="text-xs">No tag</SelectItem>
+                  <SelectItem value="none" className="text-xs">No tag</SelectItem>
                   {tags.map((t) => (
                     <SelectItem key={t.id} value={t.id.toString()} className="text-xs">
                       <span className="flex items-center gap-1.5">
@@ -407,7 +407,7 @@ export default function Prompts() {
     return prompts.filter((p) => {
       if (search && !p.text.toLowerCase().includes(search.toLowerCase())) return false;
       if (filterIntent !== "all" && p.intent !== filterIntent) return false;
-      if (filterTag !== "all" && String(p.tagId ?? "") !== filterTag) return false;
+      if (filterTag !== "all") { if (filterTag === "none" && p.tagId != null) return false; if (filterTag !== "none" && String(p.tagId ?? "") !== filterTag) return false; }
       if (filterActive === "active" && !p.isActive) return false;
       if (filterActive === "inactive" && p.isActive) return false;
       return true;
@@ -476,7 +476,7 @@ export default function Prompts() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all" className="text-xs">All Tags</SelectItem>
-            <SelectItem value="" className="text-xs">No tag</SelectItem>
+            <SelectItem value="none" className="text-xs">No tag</SelectItem>
             {tags.map((t) => (
               <SelectItem key={t.id} value={t.id.toString()} className="text-xs">
                 <span className="flex items-center gap-1.5">
