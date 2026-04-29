@@ -74,6 +74,19 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ message: "Unauthorized" });
 }
 
+/** Blocks unverified users from using the app — applied globally after requireAuth */
+async function requireEmailVerified(req: Request, res: Response, next: NextFunction) {
+  if (!req.session?.userId) return next();
+  // Allow verification/resend endpoints through
+  const allowed = ["/api/auth/verify-email", "/api/auth/resend-verification", "/api/auth/logout", "/api/auth/me"];
+  if (allowed.some((p) => req.path.startsWith(p))) return next();
+  const user = await storage.getUserById(req.session.userId);
+  if (!user?.emailVerified) {
+    return res.status(403).json({ message: "Email verification required", code: "EMAIL_NOT_VERIFIED" });
+  }
+  next();
+}
+
 function requireOrgAccess(req: Request, res: Response, next: NextFunction) {
   if (!req.session?.authenticated || !req.session?.userId) {
     return res.status(401).json({ message: "Unauthorized" });
@@ -125,6 +138,17 @@ async function checkProjectLimit(orgId: string): Promise<{ allowed: boolean; mes
 async function checkScanLimit(orgId: string): Promise<{ allowed: boolean; message?: string }> {
   const org = await storage.getOrgById(orgId);
   if (!org) return { allowed: false, message: "Organization not found" };
+
+  // Free plan: 1 lifetime scan (not monthly)
+  if (org.plan === "free" || !org.plan) {
+    const totalScans = await storage.getTotalScanCount(orgId);
+    if (totalScans >= (org.maxScansPerMonth ?? 1)) {
+      return { allowed: false, message: "You've used your free scan. Upgrade to run more scans and track your brand over time." };
+    }
+    return { allowed: true };
+  }
+
+  // Paid plans: monthly reset
   const now = new Date();
   const resetAt = org.scansResetAt ? new Date(org.scansResetAt) : new Date(0);
   const scansUsed =
@@ -449,6 +473,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ── All routes below require auth ───────────────────────────────────────────
   app.use("/api", requireAuth);
+  app.use("/api", requireEmailVerified);
 
   // ── Organization ────────────────────────────────────────────────────────────
 
@@ -788,8 +813,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/tags/:id", requireOrgAccess, async (req, res) => {
-    await storage.deleteTag(parseInt(req.params.id as string));
-    res.json({ ok: true });
+    try {
+      const tag = await storage.getTagById(parseInt(req.params.id as string));
+      if (!tag) return res.status(404).json({ message: "Tag not found" });
+      const project = await storage.getProject(tag.projectId);
+      if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
+      await storage.deleteTag(parseInt(req.params.id as string));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
   });
 
   // ── Prompts ─────────────────────────────────────────────────────────────────
@@ -861,6 +894,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/prompts/:id", requireOrgAccess, async (req, res) => {
     try {
+      const prompt = await storage.getPromptById(parseInt(req.params.id as string));
+      if (!prompt) return res.status(404).json({ message: "Prompt not found" });
+      const project = await storage.getProject(prompt.projectId);
+      if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
       res.json(await storage.updatePrompt(parseInt(req.params.id as string), req.body));
     } catch (err: any) {
       res.status(400).json({ message: err.message });
@@ -868,8 +905,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/prompts/:id", requireOrgAccess, async (req, res) => {
-    await storage.deletePrompt(parseInt(req.params.id as string));
-    res.json({ ok: true });
+    try {
+      const prompt = await storage.getPromptById(parseInt(req.params.id as string));
+      if (!prompt) return res.status(404).json({ message: "Prompt not found" });
+      const project = await storage.getProject(prompt.projectId);
+      if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
+      await storage.deletePrompt(parseInt(req.params.id as string));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
   });
 
   app.post("/api/projects/:id/prompts/bulk", requireOrgAccess, async (req, res) => {
@@ -929,8 +974,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/competitors/:id", requireOrgAccess, async (req, res) => {
-    await storage.deleteCompetitor(parseInt(req.params.id as string));
-    res.json({ ok: true });
+    try {
+      const competitor = await storage.getCompetitorById(parseInt(req.params.id as string));
+      if (!competitor) return res.status(404).json({ message: "Competitor not found" });
+      const project = await storage.getProject(competitor.projectId);
+      if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
+      await storage.deleteCompetitor(parseInt(req.params.id as string));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
   });
 
   // ── Metrics ─────────────────────────────────────────────────────────────────
@@ -963,6 +1016,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/boost-actions/:id", requireOrgAccess, async (req, res) => {
     try {
+      const action = await storage.getBoostActionById(parseInt(req.params.id as string));
+      if (!action) return res.status(404).json({ message: "Boost action not found" });
+      const project = await storage.getProject(action.projectId);
+      if (!project || project.orgId !== req.session.orgId) return res.status(403).json({ message: "Access denied" });
       res.json(await storage.updateBoostAction(parseInt(req.params.id as string), req.body));
     } catch (err: any) {
       res.status(400).json({ message: err.message });

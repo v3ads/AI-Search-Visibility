@@ -168,7 +168,7 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
     if (addPrompts && selectedPrompts.size > 0 && createdProjectId) {
       setAddingPrompts(true);
       try {
-        await fetch(`/api/projects/${createdProjectId}/prompts/bulk`, {
+        const res = await fetch(`/api/projects/${createdProjectId}/prompts/bulk`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -177,13 +177,19 @@ export function CreateProjectWizard({ open, onClose, prefill }: Props) {
             intent: "informational",
           }),
         });
-      } catch { /* non-fatal — user can add manually */ }
-      finally { setAddingPrompts(false); }
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ message: "Failed to save prompts" }));
+          toast({ title: "Prompts not saved", description: err.message + " You can add them manually from the Prompts page.", variant: "destructive" });
+        }
+      } catch {
+        toast({ title: "Prompts not saved", description: "Network error — add them manually from the Prompts page.", variant: "destructive" });
+      } finally {
+        setAddingPrompts(false);
+      }
     }
     toast({ title: "Project created!", description: `${brandName} is ready to monitor.` });
     const projectId = createdProjectId;
     handleClose();
-    // Navigate directly — don't wait for query cache to update
     if (projectId) navigate(`/projects/${projectId}`);
   };
 

@@ -150,6 +150,8 @@ export async function deleteEmailVerificationToken(userId: string): Promise<void
 // ── Password Reset ────────────────────────────────────────────────────────────
 
 export async function createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
+  // Delete any existing tokens for this user first to prevent table bloat and token reuse
+  await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
   await db.insert(passwordResetTokens).values({ userId, token, expiresAt });
 }
 
@@ -247,6 +249,11 @@ export async function getAllActiveScanSchedules(): Promise<ScanSchedule[]> {
 
 // ── Tags ──────────────────────────────────────────────────────────────────────
 
+export async function getTagById(id: number): Promise<Tag | undefined> {
+  const [tag] = await db.select().from(tags).where(eq(tags.id, id));
+  return tag;
+}
+
 export async function getTags(projectId: string): Promise<Tag[]> {
   return db.select().from(tags).where(eq(tags.projectId, projectId));
 }
@@ -261,6 +268,11 @@ export async function deleteTag(id: number): Promise<void> {
 }
 
 // ── Prompts ───────────────────────────────────────────────────────────────────
+
+export async function getPromptById(id: number): Promise<Prompt | undefined> {
+  const [prompt] = await db.select().from(prompts).where(eq(prompts.id, id));
+  return prompt;
+}
 
 export async function getPrompts(projectId: string): Promise<Prompt[]> {
   return db.select().from(prompts).where(eq(prompts.projectId, projectId)).orderBy(desc(prompts.createdAt));
@@ -281,6 +293,11 @@ export async function deletePrompt(id: number): Promise<void> {
 }
 
 // ── Competitors ───────────────────────────────────────────────────────────────
+
+export async function getCompetitorById(id: number): Promise<Competitor | undefined> {
+  const [comp] = await db.select().from(competitors).where(eq(competitors.id, id));
+  return comp;
+}
 
 export async function getCompetitors(projectId: string): Promise<Competitor[]> {
   return db.select().from(competitors).where(eq(competitors.projectId, projectId));
@@ -343,6 +360,11 @@ export async function upsertDailyMetric(metric: InsertDailyMetric): Promise<Dail
 }
 
 // ── Boost Actions ─────────────────────────────────────────────────────────────
+
+export async function getBoostActionById(id: number): Promise<BoostAction | undefined> {
+  const [action] = await db.select().from(boostActions).where(eq(boostActions.id, id));
+  return action;
+}
 
 export async function getBoostActions(projectId: string): Promise<BoostAction[]> {
   return db.select().from(boostActions).where(eq(boostActions.projectId, projectId)).orderBy(desc(boostActions.generatedAt));
@@ -435,6 +457,15 @@ export async function getOrgStats(orgId: string) {
 
 // ── Plan / Usage ──────────────────────────────────────────────────────────────
 
+export async function getTotalScanCount(orgId: string): Promise<number> {
+  const [result] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(analysisRuns)
+    .innerJoin(projects, eq(analysisRuns.projectId, projects.id))
+    .where(eq(projects.orgId, orgId));
+  return Number(result?.count ?? 0);
+}
+
 export async function incrementScanCount(orgId: string): Promise<void> {
   const org = await getOrgById(orgId);
   if (!org) return;
@@ -478,13 +509,13 @@ export const storage = {
   createApiKey, getApiKeyByHash, getOrgApiKeys, deleteApiKey, updateApiKeyLastUsed,
   createProject, getProject, getProjects, updateProject, deleteProject,
   getScanSchedule, upsertScanSchedule, getAllActiveScanSchedules,
-  getTags, createTag, deleteTag,
-  getPrompts, createPrompt, updatePrompt, deletePrompt,
-  getCompetitors, createCompetitor, deleteCompetitor,
+  getTags, createTag, deleteTag, getTagById,
+  getPrompts, createPrompt, updatePrompt, deletePrompt, getPromptById,
+  getCompetitors, createCompetitor, deleteCompetitor, getCompetitorById,
   getDailyMetrics, createDailyMetric, upsertDailyMetric,
-  getBoostActions, createBoostAction, updateBoostAction, clearGeneratedBoostActions,
+  getBoostActions, createBoostAction, updateBoostAction, clearGeneratedBoostActions, getBoostActionById,
   getCitations, createCitation, upsertCitation,
   getAnalysisRuns, getAnalysisRun, createAnalysisRun, updateAnalysisRun,
   getAllOrgs, getAllUsers, getOrgStats,
-  incrementScanCount, canRunScan,
+  incrementScanCount, canRunScan, getTotalScanCount,
 };

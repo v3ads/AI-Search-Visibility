@@ -212,7 +212,7 @@ export function AppSidebar() {
             {scansMax !== 999 && (
               <div>
                 <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                  <span>Scans this month</span>
+                  <span>{plan === "free" ? "Free scan" : "Scans this month"}</span>
                   <span>{org?.scansThisMonth || 0}/{scansMax}</span>
                 </div>
                 <div className="h-1 bg-muted rounded-full overflow-hidden">
@@ -221,6 +221,9 @@ export function AppSidebar() {
                     style={{ width: `${Math.min(100, ((org?.scansThisMonth || 0) / scansMax) * 100)}%` }}
                   />
                 </div>
+                {plan === "free" && (org?.scansThisMonth || 0) >= scansMax && (
+                  <p className="text-[10px] text-destructive mt-1">Scan used — <Link href="/billing"><span className="underline cursor-pointer">upgrade</span></Link> for more</p>
+                )}
               </div>
             )}
             {org?.name && (

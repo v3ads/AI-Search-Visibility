@@ -397,10 +397,43 @@ export default function Dashboard() {
           </div>
         </>
       ) : (
-        <Card className="p-8 text-center">
-          <Radar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No metrics data yet</h3>
-          <p className="text-sm text-muted-foreground mb-4">Run your first AI scan to start tracking brand visibility across AI models.</p>
+        <Card className="p-8">
+          <div className="flex items-center gap-2 mb-6">
+            <Radar className="h-5 w-5 text-primary" />
+            <h3 className="text-base font-semibold">Get started — 3 steps to your first scan</h3>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/40">
+              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center mt-0.5">
+                <CheckCircle2 className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Create your project</p>
+                <p className="text-xs text-muted-foreground">Done — your brand is set up and ready to monitor.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5">
+              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary flex items-center justify-center mt-0.5">
+                <span className="text-[10px] font-bold text-white">2</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Add search prompts</p>
+                <p className="text-xs text-muted-foreground mb-2">Add 1–3 queries people might use to find a brand like yours (e.g. "best AI visibility tool for marketers").</p>
+                <a href={`/projects/${project?.id}/prompts`}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs">Go to Prompts →</Button>
+                </a>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/40">
+              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-muted-foreground/20 flex items-center justify-center mt-0.5">
+                <span className="text-[10px] font-bold text-muted-foreground">3</span>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Run your first AI scan</p>
+                <p className="text-xs text-muted-foreground">Come back here and click "Run AI Scan" to see how ChatGPT and Claude mention your brand.</p>
+              </div>
+            </div>
+          </div>
         </Card>
       )}
 
