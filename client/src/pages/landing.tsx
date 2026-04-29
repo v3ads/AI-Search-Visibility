@@ -154,7 +154,20 @@ function DemoSection() {
       pollRef.current = setInterval(async () => {
         try {
           const res = await fetch(`/api/demo/scan/${id}`);
-          if (!res.ok) { stopPolling(); setStep("error"); setErrorMsg("Scan lost. Please try again."); return; }
+          if (!res.ok) {
+            stopPolling();
+            if (res.status === 404) {
+              // Server restarted mid-scan — in-memory store was wiped
+              // Auto-reset to idle so user can try again seamlessly
+              setStep("idle");
+              setErrorMsg("");
+              // Auto-reset — user can scan again immediately
+            } else {
+              setStep("error");
+              setErrorMsg("Scan lost. Please try again.");
+            }
+            return;
+          }
           const scan = await res.json();
 
           // Update progress indicators
