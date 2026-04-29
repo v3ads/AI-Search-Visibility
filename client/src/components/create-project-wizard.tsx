@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useProjectContext } from "@/lib/project-context";
 import { useToast } from "@/hooks/use-toast";
-import { Globe, Building2, X, Plus, ChevronRight, ChevronLeft, Sparkles } from "lucide-react";
+import { Globe, Building2, X, Plus, ChevronRight, ChevronLeft, Sparkles, Loader2 } from "lucide-react";
 
 const INDUSTRIES = [
   "SaaS / Software",
@@ -57,6 +57,43 @@ export function CreateProjectWizard({ open, onClose }: Props) {
   // Step 2 — Competitors
   const [competitors, setCompetitors] = useState<string[]>([]);
   const [competitorInput, setCompetitorInput] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  const fetchSuggestions = async () => {
+    setLoadingSuggestions(true);
+    setSuggestions([]);
+    try {
+      const res = await fetch("/api/suggest-competitors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          brandName: brandName.trim(),
+          domain: domain.trim(),
+          industry,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Only show suggestions not already added
+        setSuggestions(
+          (data.competitors || []).filter((s: string) => !competitors.includes(s))
+        );
+      }
+    } catch {
+      // Non-fatal — user can still add manually
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  const addSuggestion = (name: string) => {
+    if (!competitors.includes(name)) {
+      setCompetitors([...competitors, name]);
+    }
+    setSuggestions(suggestions.filter((s) => s !== name));
+  };
 
   const addCompetitor = () => {
     const val = competitorInput.trim();
@@ -121,6 +158,8 @@ export function CreateProjectWizard({ open, onClose }: Props) {
     setCountry("US");
     setCompetitors([]);
     setCompetitorInput("");
+    setSuggestions([]);
+    setLoadingSuggestions(false);
     onClose();
   };
 
@@ -209,7 +248,13 @@ export function CreateProjectWizard({ open, onClose }: Props) {
             </div>
 
             <div className="flex justify-end pt-2">
-              <Button onClick={() => setStep(2)} disabled={!canProceedStep1}>
+              <Button
+                onClick={() => {
+                  setStep(2);
+                  fetchSuggestions();
+                }}
+                disabled={!canProceedStep1}
+              >
                 Next <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             </div>
@@ -218,6 +263,36 @@ export function CreateProjectWizard({ open, onClose }: Props) {
 
         {step === 2 && (
           <div className="space-y-4 mt-4">
+
+            {/* AI Suggestions */}
+            {loadingSuggestions && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-md border border-dashed p-3">
+                <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                <span>Finding competitors for <strong>{brandName}</strong>…</span>
+              </div>
+            )}
+
+            {!loadingSuggestions && suggestions.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-xs font-medium text-muted-foreground">Suggested competitors — click to add</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.map((name) => (
+                    <button
+                      key={name}
+                      onClick={() => addSuggestion(name)}
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label>Competitor Brands</Label>
               <div className="flex gap-2">
@@ -251,7 +326,7 @@ export function CreateProjectWizard({ open, onClose }: Props) {
               </div>
             )}
 
-            {competitors.length === 0 && (
+            {competitors.length === 0 && !loadingSuggestions && suggestions.length === 0 && (
               <div className="rounded-md border border-dashed p-4 text-center">
                 <p className="text-sm text-muted-foreground">No competitors added yet.</p>
                 <p className="text-xs text-muted-foreground mt-0.5">You can skip this and add them later in Settings.</p>

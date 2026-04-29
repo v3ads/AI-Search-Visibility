@@ -571,6 +571,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ received: true });
   });
 
+  // ── Competitor Suggestions ──────────────────────────────────────────────────
+
+  app.post("/api/suggest-competitors", requireAuth, async (req, res) => {
+    try {
+      const { brandName, domain, industry } = req.body;
+      if (!brandName || !domain) {
+        return res.status(400).json({ message: "brandName and domain are required" });
+      }
+
+      const { callOpenRouterJSON } = await import("./openrouter");
+
+      const prompt = `You are a competitive intelligence expert. Given a brand, return its 3 most direct and well-known competitors.
+
+Brand: ${String(brandName).slice(0, 80)}
+Domain: ${String(domain).slice(0, 100)}
+Industry: ${String(industry || "Not specified").slice(0, 80)}
+
+Rules:
+- Return ONLY real, established companies that directly compete with this brand
+- If you are not confident the brand exists or who competes with it, return an empty array
+- Never invent or hallucinate competitors
+- Brand names only — no domains, no descriptions
+- Return exactly JSON: { "competitors": ["Brand A", "Brand B", "Brand C"] }
+- If fewer than 3 real competitors are known, return fewer
+- No markdown, no explanation, just the JSON object`;
+
+      const result = await callOpenRouterJSON<{ competitors: string[] }>(
+        "openai/gpt-4o-mini",
+        [{ role: "user", content: prompt }],
+        { maxTokens: 200, temperature: 0 }
+      );
+
+      // Sanitize and validate the response
+      const competitors = Array.isArray(result?.competitors)
+        ? result.competitors
+            .map((c: any) => String(c).trim().slice(0, 80))
+            .filter((c: string) => c.length > 0 && c.length < 80)
+            .slice(0, 3)
+        : [];
+
+      res.json({ competitors });
+    } catch (err: any) {
+      // Non-fatal — frontend handles empty suggestions gracefully
+      console.error("[suggest-competitors] error:", err.message);
+      res.json({ competitors: [] });
+    }
+  });
+
   // ── Projects ────────────────────────────────────────────────────────────────
 
   app.get("/api/projects", requireOrgAccess, async (req, res) => {
