@@ -32,6 +32,9 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Trust Cloudflare / Railway proxy so secure cookies work behind HTTPS termination
+app.set("trust proxy", 1);
+
 const PgStore = connectPgSimple(session);
 app.use(
   session({
