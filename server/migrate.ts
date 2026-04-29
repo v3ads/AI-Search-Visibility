@@ -225,8 +225,14 @@ async function migrate() {
     }
 
     // ── 4. Create/fix invitations table ────────────────────────────────────
+    const { rows: invIdSeqRows } = await pool.query(`
+      SELECT column_default FROM information_schema.columns
+      WHERE table_name = 'invitations' AND column_name = 'id' AND table_schema = 'public'
+    `);
+    const invIdHasSerial = invIdSeqRows.length > 0 && invIdSeqRows[0].column_default && invIdSeqRows[0].column_default.includes('nextval');
     const invitationsCols = await getTableColumns(pool, 'invitations');
-    if (invitationsCols.length === 0) {
+    if (invitationsCols.length === 0 || !invIdHasSerial) {
+      await pool.query(`DROP TABLE IF EXISTS invitations CASCADE`);
       await pool.query(`
         CREATE TABLE invitations (
           id SERIAL PRIMARY KEY,
@@ -240,7 +246,7 @@ async function migrate() {
           created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );
       `);
-      console.log("✓ invitations table created");
+      console.log("✓ invitations table created with SERIAL id");
     } else {
       await renameColumnIfExists(pool, 'invitations', 'orgId', 'org_id');
       await renameColumnIfExists(pool, 'invitations', 'invitedBy', 'invited_by');
@@ -251,8 +257,14 @@ async function migrate() {
     }
 
     // ── 5. Create/fix password_reset_tokens table ──────────────────────────
+    const { rows: prtIdSeqRows } = await pool.query(`
+      SELECT column_default FROM information_schema.columns
+      WHERE table_name = 'password_reset_tokens' AND column_name = 'id' AND table_schema = 'public'
+    `);
+    const prtIdHasSerial = prtIdSeqRows.length > 0 && prtIdSeqRows[0].column_default && prtIdSeqRows[0].column_default.includes('nextval');
     const prtCols = await getTableColumns(pool, 'password_reset_tokens');
-    if (prtCols.length === 0) {
+    if (prtCols.length === 0 || !prtIdHasSerial) {
+      await pool.query(`DROP TABLE IF EXISTS password_reset_tokens CASCADE`);
       await pool.query(`
         CREATE TABLE password_reset_tokens (
           id SERIAL PRIMARY KEY,
@@ -263,7 +275,7 @@ async function migrate() {
           created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );
       `);
-      console.log("✓ password_reset_tokens table created");
+      console.log("✓ password_reset_tokens table created with SERIAL id");
     } else {
       await renameColumnIfExists(pool, 'password_reset_tokens', 'userId', 'user_id');
       await renameColumnIfExists(pool, 'password_reset_tokens', 'expiresAt', 'expires_at');
@@ -273,8 +285,14 @@ async function migrate() {
     }
 
     // ── 6. Create/fix api_keys table ───────────────────────────────────────
+    const { rows: akIdSeqRows } = await pool.query(`
+      SELECT column_default FROM information_schema.columns
+      WHERE table_name = 'api_keys' AND column_name = 'id' AND table_schema = 'public'
+    `);
+    const akIdHasSerial = akIdSeqRows.length > 0 && akIdSeqRows[0].column_default && akIdSeqRows[0].column_default.includes('nextval');
     const apiKeysCols = await getTableColumns(pool, 'api_keys');
-    if (apiKeysCols.length === 0) {
+    if (apiKeysCols.length === 0 || !akIdHasSerial) {
+      await pool.query(`DROP TABLE IF EXISTS api_keys CASCADE`);
       await pool.query(`
         CREATE TABLE api_keys (
           id SERIAL PRIMARY KEY,
@@ -287,7 +305,7 @@ async function migrate() {
           created_at TIMESTAMP NOT NULL DEFAULT NOW()
         );
       `);
-      console.log("✓ api_keys table created");
+      console.log("✓ api_keys table created with SERIAL id");
     } else {
       await renameColumnIfExists(pool, 'api_keys', 'orgId', 'org_id');
       await renameColumnIfExists(pool, 'api_keys', 'keyHash', 'key_hash');
