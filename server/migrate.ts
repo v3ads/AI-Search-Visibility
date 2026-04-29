@@ -380,11 +380,18 @@ async function migrate() {
       await renameColumnIfExists(pool, 'scan_schedules', 'nextRunAt', 'next_run_at');
       await renameColumnIfExists(pool, 'scan_schedules', 'emailReport', 'email_report');
       await renameColumnIfExists(pool, 'scan_schedules', 'createdAt', 'created_at');
+      // Ensure all required columns exist (older deploys may be missing them)
+      await addColumnIfMissing(pool, 'scan_schedules', 'frequency', "TEXT NOT NULL DEFAULT 'weekly'");
+      await addColumnIfMissing(pool, 'scan_schedules', 'day_of_week', 'INTEGER DEFAULT 1');
+      await addColumnIfMissing(pool, 'scan_schedules', 'hour', 'INTEGER DEFAULT 8');
+      await addColumnIfMissing(pool, 'scan_schedules', 'is_active', 'BOOLEAN NOT NULL DEFAULT true');
+      await addColumnIfMissing(pool, 'scan_schedules', 'last_run_at', 'TIMESTAMP');
+      await addColumnIfMissing(pool, 'scan_schedules', 'next_run_at', 'TIMESTAMP');
+      await addColumnIfMissing(pool, 'scan_schedules', 'email_report', 'BOOLEAN NOT NULL DEFAULT true');
+      await addColumnIfMissing(pool, 'scan_schedules', 'created_at', 'TIMESTAMP NOT NULL DEFAULT NOW()');
       // Handle orgId column if it exists (old schema had it)
       const ssColsNow = await getTableColumns(pool, 'scan_schedules');
       if (ssColsNow.includes('orgId') || ssColsNow.includes('org_id')) {
-        // Remove org_id from scan_schedules if it exists (not in new schema)
-        // Actually keep it, just rename
         await renameColumnIfExists(pool, 'scan_schedules', 'orgId', 'org_id');
       }
       console.log("✓ scan_schedules table ready");
