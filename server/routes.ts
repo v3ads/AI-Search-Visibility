@@ -20,6 +20,7 @@ import {
   sendScanCompleteEmail,
 } from "./email";
 import { STRIPE_PRICE_IDS, APP_URL } from "./stripe-config";
+import { startDemoScan, getDemoScan } from "./demo-scan";
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2025-03-31.basil" as any })
@@ -37,7 +38,16 @@ const authLimiter = rateLimit({
   skip: () => process.env.NODE_ENV !== "production",
 });
 
-/** Lighter limiter for scan triggers — prevents scan quota abuse */
+/** Strict limiter for demo scans — 2 per IP per hour to prevent API cost abuse */
+const demoLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 2,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip || "unknown",
+  message: { message: "You've used your free demo scans for this hour. Sign up for unlimited access." },
+  skip: () => process.env.NODE_ENV !== "production",
+});
 const scanLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 5,
@@ -331,6 +341,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
+  });
+
+  // ── Public Demo Scan — no auth, rate limited by IP ──────────────────────────
+
+  app.post("/api/demo/scan", demoLimiter, async (req, res) => {
+    try {
+      const { brandName, domain, industry } = req.body;
+      if (!brandName || !domain) {
+        return res.status(400).json({ message: "brandName and domain are required" });
+      }
+      if (typeof brandName !== "string" || typeof domain !== "string") {
+        return res.status(400).json({ message: "Invalid input" });
+      }
+
+      const id = randomBytes(12).toString("hex");
+
+      // Fire scan in background — don't await
+      startDemoScan(id, brandName, domain, industry || "General").catch((err) =>
+        console.error("[demo-scan] unhandled error:", err.message)
+      );
+
+      res.json({ id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/demo/scan/:id", (req, res) => {
+    const scan = getDemoScan(req.params.id as string);
+    if (!scan) return res.status(404).json({ message: "Demo scan not found or expired" });
+    res.json(scan);
   });
 
   // ── All routes below require auth ───────────────────────────────────────────

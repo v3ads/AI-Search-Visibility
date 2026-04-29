@@ -111,44 +111,76 @@ function DemoSection() {
   const [brand, setBrand] = useState("");
   const [domain, setDomain] = useState("");
   const [industry, setIndustry] = useState("SaaS / Software");
-  const [step, setStep] = useState<"idle" | "scanning" | "result">("idle");
-  const [scanModel, setScanModel] = useState("");
-  const [scanning, setScanning] = useState(false);
-  const [result, setResult] = useState<{ visibility: number; sov: number; sentiment: number; rank: number } | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [step, setStep] = useState<"idle" | "scanning" | "result" | "error">("idle");
+  const [progress, setProgress] = useState<{ model: string; done: boolean }[]>([]);
+  const [activeModel, setActiveModel] = useState("");
+  const [result, setResult] = useState<{
+    visibilityPct: number; sovPct: number; sentimentScore: number;
+    avgRank: number; mentionedBy: string[];
+  } | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const INDUSTRIES = ["SaaS / Software","E-commerce / Retail","Finance / Fintech","Healthcare / MedTech","Marketing / Agencies","Education / EdTech","Real Estate","Travel / Hospitality"];
-
   const canRun = brand.trim().length > 0 && domain.trim().length > 0;
 
-  const runDemo = () => {
+  const stopPolling = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+
+  const runDemo = async () => {
     if (!canRun) return;
     setStep("scanning");
-    setScanning(true);
-    // Free plan only scans ChatGPT + Claude
-    const freeModels = ["ChatGPT", "Claude"];
-    let i = 0;
-    const tick = () => {
-      if (i < freeModels.length) {
-        setScanModel(freeModels[i]);
-        i++;
-        timerRef.current = setTimeout(tick, 1100);
-      } else {
-        const seed = brand.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-        setResult({
-          visibility: 30 + (seed % 45),
-          sov:        15 + (seed % 35),
-          sentiment:  55 + (seed % 35),
-          rank:       1 + (seed % 4),
-        });
-        setScanning(false);
-        setStep("result");
+    setProgress([{ model: "ChatGPT", done: false }, { model: "Claude", done: false }]);
+    setActiveModel("ChatGPT");
+    setErrorMsg("");
+
+    try {
+      const startRes = await fetch("/api/demo/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandName: brand.trim(), domain: domain.trim(), industry }),
+      });
+
+      if (!startRes.ok) {
+        const err = await startRes.json().catch(() => ({}));
+        setErrorMsg(err.message || "Too many demo scans. Try again in an hour or sign up free.");
+        setStep("error");
+        return;
       }
-    };
-    tick();
+
+      const { id } = await startRes.json();
+
+      pollRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/demo/scan/${id}`);
+          if (!res.ok) { stopPolling(); setStep("error"); setErrorMsg("Scan lost. Please try again."); return; }
+          const scan = await res.json();
+
+          // Update progress indicators
+          if (scan.progress) {
+            setProgress(scan.progress);
+            const current = scan.progress.find((p: any) => !p.done);
+            if (current) setActiveModel(current.model);
+          }
+
+          if (scan.status === "complete" && scan.result) {
+            stopPolling();
+            setResult(scan.result);
+            setStep("result");
+          } else if (scan.status === "failed") {
+            stopPolling();
+            setStep("error");
+            setErrorMsg(scan.error || "Scan failed. Please try again.");
+          }
+        } catch { stopPolling(); setStep("error"); setErrorMsg("Connection lost. Please try again."); }
+      }, 2000);
+
+    } catch {
+      setStep("error");
+      setErrorMsg("Could not start scan. Please try again.");
+    }
   };
 
-  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  useEffect(() => () => stopPolling(), []);
 
   return (
     <div className="pb-demo-card">
@@ -178,18 +210,34 @@ function DemoSection() {
       {step === "scanning" && (
         <div className="pb-scan-progress">
           <div className="pb-scan-spinner"/>
-          <p className="pb-scan-label">Querying <strong style={{ color: MODEL_COLORS[scanModel] || "#A855F7" }}>{scanModel || "AI models"}</strong>…</p>
+          <p className="pb-scan-label">
+            {activeModel
+              ? <>Querying <strong style={{ color: MODEL_COLORS[activeModel] || "#A855F7" }}>{activeModel}</strong> with real prompts…</>
+              : <>Initialising scan…</>}
+          </p>
           <div className="pb-model-dots">
-            {["ChatGPT","Claude"].map(m => (
-              <div key={m} className="pb-model-dot" style={{ background: MODEL_COLORS[m], opacity: m === scanModel ? 1 : 0.25 }}>
-                <span>{m[0]}</span>
+            {progress.map(p => (
+              <div key={p.model} className="pb-model-dot" style={{ background: MODEL_COLORS[p.model], opacity: p.done ? 1 : (p.model === activeModel ? 1 : 0.25), position: "relative" }}>
+                {p.done
+                  ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  : <span>{p.model[0]}</span>}
               </div>
             ))}
-            <div className="pb-model-dot pb-model-locked" title="Unlock Gemini & Grok — sign up free">
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><rect x="2" y="5" width="8" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none"/><path d="M4 5V3.5a2 2 0 0 1 4 0V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-            </div>
+            {["Gemini","Grok"].map(m => (
+              <div key={m} className="pb-model-dot pb-model-locked" title="Sign up free to unlock Gemini & Grok">
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><rect x="2" y="5" width="8" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none"/><path d="M4 5V3.5a2 2 0 0 1 4 0V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              </div>
+            ))}
           </div>
-          <p className="pb-model-note">+2 more models unlocked when you sign up free</p>
+          <p className="pb-model-note">Real AI queries running · +Gemini & Grok unlocked on signup</p>
+        </div>
+      )}
+
+      {step === "error" && (
+        <div className="pb-scan-progress">
+          <p style={{ color: "#ef4444", fontSize: 14, marginBottom: 12 }}>{errorMsg}</p>
+          <button className="pb-btn-primary" onClick={() => navigate("/signup")}>Sign Up Free — Unlimited Scans</button>
+          <button className="pb-btn-ghost" style={{ marginTop: 8, width: "100%" }} onClick={() => { setStep("idle"); setErrorMsg(""); }}>Try again</button>
         </div>
       )}
 
@@ -197,23 +245,29 @@ function DemoSection() {
         <div className="pb-result">
           <div className="pb-result-meta">
             <span className="pb-result-brand">{brand} · {domain}</span>
-            <span className="pb-result-models">ChatGPT + Claude</span>
+            <span className="pb-result-models">
+              {result.mentionedBy.length > 0
+                ? `Mentioned by: ${result.mentionedBy.join(", ")}`
+                : "ChatGPT + Claude scanned"}
+            </span>
           </div>
           <div className="pb-metrics-grid">
             <div className="pb-metric-tile">
-              <div className="pb-metric-value" style={{ color: "#A855F7" }}>{result.visibility}%</div>
+              <div className="pb-metric-value" style={{ color: "#A855F7" }}>{result.visibilityPct}%</div>
               <div className="pb-metric-label">AI Visibility</div>
             </div>
             <div className="pb-metric-tile">
-              <div className="pb-metric-value" style={{ color: "#06B6D4" }}>{result.sov}%</div>
+              <div className="pb-metric-value" style={{ color: "#06B6D4" }}>{result.sovPct}%</div>
               <div className="pb-metric-label">Share of Voice</div>
             </div>
             <div className="pb-metric-tile">
-              <div className="pb-metric-value" style={{ color: "#f59e0b" }}>{result.sentiment}/100</div>
+              <div className="pb-metric-value" style={{ color: "#f59e0b" }}>{result.sentimentScore}/100</div>
               <div className="pb-metric-label">Sentiment Score</div>
             </div>
             <div className="pb-metric-tile">
-              <div className="pb-metric-value" style={{ color: "#22c55e" }}>#{result.rank}</div>
+              <div className="pb-metric-value" style={{ color: "#22c55e" }}>
+                {result.avgRank > 0 ? `#${result.avgRank}` : "—"}
+              </div>
               <div className="pb-metric-label">Avg AI Ranking</div>
             </div>
           </div>
@@ -232,9 +286,11 @@ function DemoSection() {
 
           <div className="pb-result-cta">
             <p className="pb-result-cta-text">
-              {result.visibility > 60
+              {result.visibilityPct > 60
                 ? `${brand} has strong AI visibility on ChatGPT + Claude — but Gemini and Grok may tell a different story. Unlock your full report.`
-                : `${brand} has real room to grow in AI search. Your full Boost Plan is ready — sign up free to unlock it.`}
+                : result.visibilityPct > 0
+                ? `${brand} appears in some AI responses but has real room to grow. Your full Boost Plan is ready — sign up free to unlock it.`
+                : `${brand} isn't appearing in AI responses yet. That's actually good news — your Boost Plan will show you exactly how to fix it.`}
             </p>
             <button className="pb-btn-primary pb-btn-full" onClick={() => navigate("/signup")}>
               Unlock Full Report — Free
