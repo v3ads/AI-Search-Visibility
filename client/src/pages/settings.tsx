@@ -12,7 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import {
   Globe, Building2, Map, Languages, Users, Tag,
   Pencil, Check, X, Plus, Trash2, AlertTriangle,
@@ -51,6 +51,7 @@ export default function SettingsPage() {
   const { updateProject, deleteProject } = useProjectContext();
   const { org } = useAuth();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const queryClient = useQueryClient();
 
   // Project details editing
@@ -159,6 +160,7 @@ export default function SettingsPage() {
     try {
       await deleteProject(projectId);
       toast({ title: "Project deleted" });
+      navigate("/projects");
     } catch (err: any) {
       toast({ title: "Failed to delete project", description: err.message, variant: "destructive" });
       setDeletingProject(false);
