@@ -172,9 +172,65 @@ export async function getSitePrompts(
 }
 
 /**
- * Lightweight version — just generate fallback prompts from brand name + industry
- * when Firecrawl is unavailable or times out.
+ * Generate competitor suggestions using site context from Firecrawl.
+ * Much more accurate than brand-name-only because it knows the actual
+ * business type, location, and niche.
  */
+export async function getSiteCompetitors(
+  domain: string,
+  brandName: string,
+  industry: string
+): Promise<string[]> {
+  let context: SiteContext | null = null;
+
+  // Try Firecrawl first if key is set
+  if (process.env.FIRECRAWL_API_KEY) {
+    try {
+      const siteContent = await crawlSite(domain);
+      context = await extractContext(brandName, domain, siteContent);
+    } catch (err: any) {
+      log(`[site-intelligence] Firecrawl failed for competitors: ${err.message}`, "firecrawl");
+    }
+  }
+
+  // Build the competitor prompt — richer if we have site context
+  const contextBlock = context
+    ? `Business category: ${context.category}
+Location: ${context.location || "Not location-specific"}
+Target customer: ${context.targetCustomer}
+Key offerings: ${context.keyOfferings.join(", ")}
+Summary: ${context.summary}`
+    : `Industry: ${industry}`;
+
+  const prompt = `You are a competitive intelligence expert. Given a brand and its business context, return its 3 most direct competitors — companies its customers would also evaluate.
+
+Brand: ${brandName}
+Domain: ${domain}
+${contextBlock}
+
+Rules:
+- Return ONLY real, established companies that directly compete with this brand
+- For local businesses, prefer local or regional competitors over national ones where they exist
+- If this is a niche or local business with no obvious direct competitors, return similar businesses in the same category/location
+- Never invent or hallucinate — if genuinely unknown, return an empty array
+- Brand names only — no domains, no descriptions
+- Return exactly JSON: { "competitors": ["Brand A", "Brand B", "Brand C"] }
+- If fewer than 3 real competitors are known, return fewer
+- No markdown, no explanation, just the JSON object`;
+
+  const result = await callOpenRouterJSON<{ competitors: string[] }>(
+    "openai/gpt-4o-mini",
+    [{ role: "user", content: prompt }],
+    { maxTokens: 200, temperature: 0 }
+  );
+
+  return Array.isArray(result?.competitors)
+    ? result.competitors
+        .map((c: any) => String(c).trim().slice(0, 80))
+        .filter((c: string) => c.length > 0 && c.length < 80)
+        .slice(0, 3)
+    : [];
+}
 export async function getFallbackPrompts(
   brandName: string,
   industry: string,
