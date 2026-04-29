@@ -170,9 +170,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) return res.status(401).json({ message: "Invalid email or password" });
 
-      // Get first org
+      // Get orgs, prefer highest-plan org as default
       const orgs = await storage.getOrgsForUser(user.id);
-      const activeOrg = orgs[0];
+      const planOrder = ["enterprise", "agency", "growth", "starter", "free"];
+      const sortedOrgs = [...orgs].sort((a, b) => {
+        const ai = planOrder.indexOf(a.plan ?? "free");
+        const bi = planOrder.indexOf(b.plan ?? "free");
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      });
+      const activeOrg = sortedOrgs[0] || orgs[0];
 
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
 
