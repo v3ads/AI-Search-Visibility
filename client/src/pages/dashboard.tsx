@@ -48,6 +48,9 @@ function getLatestMetrics(metrics: DailyMetric[], brandName: string) {
 function ScanButton() {
   const [scanning, setScanning] = useState(false);
   const [pollId, setPollId] = useState<number | null>(null);
+  const [progress, setProgress] = useState<{ completed: number; total: number; startedAt: string | null }>({
+    completed: 0, total: 0, startedAt: null,
+  });
   const { toast } = useToast();
   const { activeProjectId } = useProjectContext();
   const { data: scans } = useAnalysisRuns();
@@ -59,6 +62,11 @@ function ScanButton() {
     if (runningRun) {
       setScanning(true);
       setPollId(runningRun.id);
+      setProgress({
+        completed: runningRun.completedPrompts ?? 0,
+        total: runningRun.totalPrompts ?? 0,
+        startedAt: runningRun.startedAt ? String(runningRun.startedAt) : null,
+      });
     }
   }, [scans, pollId, scanning]);
 
@@ -80,11 +88,13 @@ function ScanButton() {
         }
         errorCount = 0;
         const run: AnalysisRun = await res.json();
+        setProgress((p) => ({ completed: run.completedPrompts ?? 0, total: run.totalPrompts ?? 0, startedAt: p.startedAt ?? (run.startedAt ? String(run.startedAt) : null) }));
         if (run.status === "completed") {
           clearInterval(interval);
           setScanning(false);
           setPollId(null);
-          toast({ title: "Scan Complete", description: `Analyzed ${run.completedPrompts} prompt-model combinations.` });
+          setProgress({ completed: 0, total: 0, startedAt: null });
+          toast({ title: "Scan Complete ✓", description: `${run.completedPrompts} queries across ${(run.modelsUsed ?? []).length} AI models.` });
           queryClient.invalidateQueries({ queryKey: ["/api/projects", activeProjectId, "metrics"] });
           queryClient.invalidateQueries({ queryKey: ["/api/projects", activeProjectId, "citations"] });
           queryClient.invalidateQueries({ queryKey: ["/api/projects", activeProjectId, "scans"] });
@@ -92,6 +102,7 @@ function ScanButton() {
           clearInterval(interval);
           setScanning(false);
           setPollId(null);
+          setProgress({ completed: 0, total: 0, startedAt: null });
           toast({ title: "Scan Failed", description: run.error || "Unknown error", variant: "destructive" });
         }
       } catch {
@@ -103,19 +114,20 @@ function ScanButton() {
           toast({ title: "Scan Status Unknown", description: "Lost connection. Check results later.", variant: "destructive" });
         }
       }
-    }, 3000);
+    }, 2000);
     return () => clearInterval(interval);
   }, [pollId, toast]);
 
   const handleScan = async () => {
     setScanning(true);
+    setProgress({ completed: 0, total: 0, startedAt: new Date().toISOString() });
     try {
       const res = await apiRequest("POST", `/api/projects/${activeProjectId}/scan`);
       const data = await res.json();
       setPollId(data.runId);
-      toast({ title: "Scan Started", description: "Querying AI models with your prompts. This may take a few minutes." });
     } catch (err: any) {
       setScanning(false);
+      setProgress({ completed: 0, total: 0, startedAt: null });
       const isNoPrompts = err.message?.includes("No active prompts");
       toast({
         title: "Scan Failed",
@@ -127,24 +139,50 @@ function ScanButton() {
     }
   };
 
+  if (scanning && progress.total > 0) {
+    const pct = Math.round((progress.completed / progress.total) * 100);
+    const elapsed = progress.startedAt ? (Date.now() - new Date(progress.startedAt).getTime()) / 1000 : 0;
+    const rate = progress.completed > 0 ? elapsed / progress.completed : 0;
+    const remaining = progress.total > progress.completed ? Math.round(rate * (progress.total - progress.completed)) : 0;
+    const etaStr = remaining > 90 ? `~${Math.round(remaining / 60)}m left` : remaining > 5 ? `~${remaining}s left` : "";
+    return (
+      <div className="flex flex-col gap-1.5 min-w-[220px]">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground flex items-center gap-1.5">
+            <Loader2 className="h-3 w-3 animate-spin text-primary" />
+            Scanning AI models...
+          </span>
+          <span className="text-muted-foreground">{etaStr}</span>
+        </div>
+        <div className="h-2 bg-muted rounded-full overflow-hidden">
+          <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${Math.max(2, pct)}%` }} />
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>{progress.completed} of {progress.total} queries</span>
+          <span className="font-semibold text-primary">{pct}%</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (scanning) {
+    return (
+      <div className="flex flex-col gap-1.5 min-w-[220px]">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+          Starting scan...
+        </div>
+        <div className="h-2 bg-muted rounded-full overflow-hidden">
+          <div className="h-full bg-primary/40 rounded-full animate-pulse w-full" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <Button
-      onClick={handleScan}
-      disabled={scanning}
-      className="gap-2"
-      data-testid="button-run-scan"
-    >
-      {scanning ? (
-        <>
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Scanning...
-        </>
-      ) : (
-        <>
-          <Radar className="h-4 w-4" />
-          Run AI Scan
-        </>
-      )}
+    <Button onClick={handleScan} disabled={scanning} className="gap-2" data-testid="button-run-scan">
+      <Radar className="h-4 w-4" />
+      Run AI Scan
     </Button>
   );
 }
