@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Zap } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { LogoMark } from "@/components/logo";
 
 export default function LoginPage() {
   const [, navigate] = useLocation();
@@ -36,10 +37,14 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Zap className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-bold">PlumBoost</span>
+            <LogoMark size={36} />
+            <span className="text-2xl font-bold" style={{
+              background: "linear-gradient(135deg, #A855F7, #06B6D4)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+              letterSpacing: "-0.02em",
+            }}>PlumBoost</span>
           </div>
           <p className="text-muted-foreground text-sm">AI Search Visibility Platform</p>
         </div>

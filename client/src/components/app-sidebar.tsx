@@ -1,8 +1,9 @@
+import { LogoMark } from '@/components/logo';
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Eye, PieChart, Trophy, Shield, SmilePlus,
-  Link2, FileText, Rocket, Settings, Zap, ChevronsUpDown, Plus, Check, Radar,
+  Link2, FileText, Rocket, Settings, ChevronsUpDown, Plus, Check, Radar,
   CreditCard, Users, Crown,
 } from "lucide-react";
 import {
@@ -74,11 +75,9 @@ export function AppSidebar() {
         <SidebarHeader className="p-3">
           {/* Brand logo */}
           <div className="flex items-center gap-2 px-1 mb-2">
-            <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shrink-0">
-              <Zap className="w-3.5 h-3.5 text-primary-foreground" />
-            </div>
+            <LogoMark size={28} />
             <div>
-              <span className="font-bold text-sm tracking-tight">PlumBoost</span>
+              <span className="font-bold text-sm tracking-tight" style={{ background: "linear-gradient(135deg, #A855F7, #06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>PlumBoost</span>
               <span className="text-[10px] text-muted-foreground block leading-tight">AI Search Visibility</span>
             </div>
           </div>

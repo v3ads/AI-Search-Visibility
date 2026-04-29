@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Zap, Check } from "lucide-react";
+import { Loader2, Check } from "lucide-react";
+import { LogoMark } from "@/components/logo";
 
 const FEATURES = [
   "Monitor your brand in ChatGPT, Claude, Gemini & Grok",
@@ -46,24 +47,22 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Left panel — features */}
-      <div className="hidden lg:flex flex-col justify-center p-12 w-1/2 bg-primary text-primary-foreground">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="w-8 h-8 bg-primary-foreground/20 rounded-lg flex items-center justify-center">
-            <Zap className="w-5 h-5" />
-          </div>
-          <span className="text-2xl font-bold">PlumBoost</span>
+      <div className="hidden lg:flex flex-col justify-center p-12 w-1/2 text-white" style={{ background: "linear-gradient(135deg, #4C1D95, #0E7490)" }}>
+        <div className="flex items-center gap-3 mb-8">
+          <LogoMark size={36} />
+          <span className="text-2xl font-bold tracking-tight">PlumBoost</span>
         </div>
         <h2 className="text-3xl font-bold mb-4">Know exactly how AI talks about your brand</h2>
-        <p className="text-primary-foreground/80 mb-8 text-lg">
+        <p className="text-white/75 mb-8 text-lg">
           The only platform that tracks your brand's visibility across every major AI search engine in real time.
         </p>
         <ul className="space-y-3">
           {FEATURES.map((f) => (
             <li key={f} className="flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full bg-primary-foreground/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                 <Check className="w-3 h-3" />
               </div>
-              <span className="text-primary-foreground/90">{f}</span>
+              <span className="text-white/90">{f}</span>
             </li>
           ))}
         </ul>
@@ -74,10 +73,14 @@ export default function SignupPage() {
         <div className="w-full max-w-md space-y-6">
           <div className="lg:hidden text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Zap className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-2xl font-bold">PlumBoost</span>
+              <LogoMark size={32} />
+              <span className="text-2xl font-bold" style={{
+                background: "linear-gradient(135deg, #A855F7, #06B6D4)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+                letterSpacing: "-0.02em",
+              }}>PlumBoost</span>
             </div>
           </div>
 
@@ -116,8 +119,8 @@ export default function SignupPage() {
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
                   By signing up you agree to our{" "}
-                  <a href="#" className="underline">Terms of Service</a> and{" "}
-                  <a href="#" className="underline">Privacy Policy</a>.
+                  <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link> and{" "}
+                  <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>.
                 </p>
               </form>
             </CardContent>
