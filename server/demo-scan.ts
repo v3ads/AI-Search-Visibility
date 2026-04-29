@@ -27,7 +27,7 @@ async function getDemoPrompts(
   // Only crawl if FIRECRAWL_API_KEY is set
   if (process.env.FIRECRAWL_API_KEY) {
     try {
-      const { prompts, siteContext } = await getSitePrompts(domain, brandName, 2, false);
+      const { prompts, siteContext } = await getSitePrompts(domain, brandName, 3, true);
       if (prompts.length >= 2) {
         const locationParts = [siteContext.neighborhood, siteContext.location].filter(Boolean);
         const note = locationParts.length > 0
@@ -110,8 +110,9 @@ export async function startDemoScan(
   } catch (err: any) {
     log(`[demo-scan] prompt generation failed: ${err.message}`, "demo");
     prompts = [
-      `What are the best ${safe.industry} options available?`,
-      `I'm looking for recommendations in ${safe.industry} — what do you suggest?`,
+      `best ${safe.industry} options near me`,
+      `top ${safe.industry} recommendations`,
+      `${safe.industry} worth considering`,
     ];
   }
 

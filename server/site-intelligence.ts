@@ -127,25 +127,15 @@ Rules:
 
 // ── Prompt Generation ─────────────────────────────────────────────────────────
 
-const INTENT_INSTRUCTIONS: Record<string, string> = {
-  informational: "General discovery questions — someone learning about options in this category without knowing the brand yet",
-  consideration:  "Comparison and evaluation questions — someone actively comparing options before deciding",
-  transactional:  "Ready-to-act questions — someone looking to sign up, book, visit, or purchase now",
-  local:          "Location-specific questions — someone asking about options in a specific area, neighborhood, or city",
-  lifestyle:      "Lifestyle and fit questions — someone asking about what life/work is like using this type of product/service",
-};
-
 async function generatePrompts(
   brandName: string,
   context: SiteContext,
   count: number
 ): Promise<string[]> {
   const locationContext = [context.neighborhood, context.location].filter(Boolean).join(", ");
+  const city = context.location || context.neighborhood || "";
 
-  // Pick which intents to cover based on count
-  const intents = Object.keys(INTENT_INSTRUCTIONS).slice(0, Math.max(count, 5));
-
-  const prompt = `You are an AI search visibility expert. Generate ${count} realistic search prompts that a potential customer would ask an AI assistant (like ChatGPT or Google) when looking for something like "${brandName}".
+  const prompt = `You are an AI search visibility expert. Generate ${count} search queries that a real person would type into ChatGPT or Google when looking for something like "${brandName}".
 
 BUSINESS CONTEXT:
 - Category: ${context.category}
@@ -154,34 +144,40 @@ BUSINESS CONTEXT:
 - Target customer: ${context.targetCustomer}
 - Key offerings: ${context.keyOfferings.join(", ")}
 - Unique attributes: ${context.uniqueAttributes.join(", ")}
-- Search triggers (situations that lead to this brand): ${context.searchTriggers.join(", ")}
+- Search triggers: ${context.searchTriggers.join(", ")}
 
-Generate exactly ${count} prompts covering these intent types:
-${intents.map((intent, i) => `${i + 1}. ${intent.toUpperCase()}: ${INTENT_INSTRUCTIONS[intent]}`).join("\n")}
+Generate exactly ${count} queries. They MUST:
+- Sound like real human speech — short, natural, casual
+- Be 4-10 words each (no long sentences)
+- Cover different angles: discovery, comparison, location-based, lifestyle
+- Always include one ultra-short anchor like "best [category] in [city]" or "luxury [type] [city]"
+${city ? `- Use "${city}" naturally in at least 2 queries` : ""}
+- NOT mention "${brandName}" — test if AI discovers it unprompted
 
-Critical rules:
-- Do NOT mention "${brandName}" anywhere in the prompts — we're testing if AI discovers it unprompted
-- Use specific location details (${locationContext || "if relevant"}) where natural — not just the city but also neighborhood if known
-- Each prompt should reflect a DIFFERENT reason someone might find this brand — vary the angle completely
-- Think like real customers at different stages of their journey
-- 8–25 words per prompt
-- No duplicates or near-duplicates
+Examples of GOOD queries:
+- "best luxury apartments in Boca Raton"
+- "where to live in Boca Raton Florida"
+- "upscale apartment communities near me"
+- "nicest places to rent in Boca Raton"
+
+Examples of BAD queries (too long, too formal):
+- "What are the most luxurious maintenance-free living options that offer..."
+- "How do apartment communities in Boca Raton compare in terms of..."
 
 Return ONLY valid JSON:
-{ "prompts": ["prompt 1", "prompt 2", ...] }`;
+{ "prompts": ["query 1", "query 2", ...] }`;
 
   const result = await callOpenRouterJSON<{ prompts: string[] }>(
     "openai/gpt-4o-mini",
     [{ role: "user", content: prompt }],
-    { maxTokens: 800, temperature: 0.5 }
+    { maxTokens: 400, temperature: 0.4 }
   );
 
   const raw = Array.isArray(result?.prompts) ? result.prompts : [];
 
-  // Filter and sanitize
   return raw
     .map((p: string) => String(p).trim())
-    .filter((p: string) => p.length > 10 && p.length < 250 && !p.toLowerCase().includes(brandName.toLowerCase()))
+    .filter((p: string) => p.length > 5 && p.length < 120 && !p.toLowerCase().includes(brandName.toLowerCase()))
     .slice(0, count);
 }
 
@@ -301,23 +297,24 @@ Rules:
 export async function getFallbackPrompts(
   brandName: string,
   industry: string,
-  count = 2
+  count = 3
 ): Promise<string[]> {
-  const prompt = `Generate ${count} realistic AI search prompts a customer would ask when looking for a ${industry} company.
-Do NOT mention "${brandName}". Cover different intent types (informational, local, transactional).
-Return ONLY JSON: { "prompts": ["prompt 1", "prompt 2"] }`;
+  const prompt = `Generate ${count} short, natural search queries (4-10 words each) a person would type into ChatGPT when looking for a ${industry} company.
+Do NOT mention "${brandName}". Include one very short anchor like "best [type] in [place]".
+Return ONLY JSON: { "prompts": ["query 1", "query 2"] }`;
 
   try {
     const result = await callOpenRouterJSON<{ prompts: string[] }>(
       "openai/gpt-4o-mini",
       [{ role: "user", content: prompt }],
-      { maxTokens: 300, temperature: 0.4 }
+      { maxTokens: 200, temperature: 0.4 }
     );
     return result?.prompts?.slice(0, count) ?? [];
   } catch {
     return [
-      `What are the best ${industry} options available?`,
-      `I'm looking for ${industry} recommendations — what do you suggest?`,
+      `best ${industry} options`,
+      `top ${industry} recommendations`,
+      `${industry} worth trying`,
     ];
   }
 }
