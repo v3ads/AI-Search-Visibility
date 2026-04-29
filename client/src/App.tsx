@@ -38,6 +38,7 @@ import Prompts from "@/pages/prompts";
 import BoostActions from "@/pages/boost-actions";
 import SettingsPage from "@/pages/settings";
 import ScanPage from "@/pages/scan";
+import ScanHistoryPage from "@/pages/scan-history";
 import BillingPage from "@/pages/billing";
 import TeamPage from "@/pages/team";
 import AccountPage from "@/pages/account";
@@ -217,6 +218,7 @@ function ProjectRouter() {
       <Route path="/projects/:id/sentiment" component={Sentiment} />
       <Route path="/projects/:id/citations" component={Citations} />
       <Route path="/projects/:id/scan" component={ScanPage} />
+      <Route path="/projects/:id/history" component={ScanHistoryPage} />
       <Route path="/projects/:id/prompts" component={Prompts} />
       <Route path="/projects/:id/boost-actions" component={BoostActions} />
       <Route path="/projects/:id/settings" component={SettingsPage} />

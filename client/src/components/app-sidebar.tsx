@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Eye, PieChart, Trophy, Shield, SmilePlus,
-  Link2, FileText, Rocket, Settings, ChevronsUpDown, Plus, Check, Radar,
+  Link2, FileText, Rocket, Settings, ChevronsUpDown, Plus, Check, Radar, History,
   CreditCard, Users, Crown,
 } from "lucide-react";
 import {
@@ -49,6 +49,7 @@ export function AppSidebar() {
 
   const configItems = [
     { title: "Scan", url: `${base}/scan`, icon: Radar },
+    { title: "History", url: `${base}/history`, icon: History },
     { title: "Prompts", url: `${base}/prompts`, icon: FileText },
     { title: "Boost Actions", url: `${base}/boost-actions`, icon: Rocket },
     { title: "Settings", url: `${base}/settings`, icon: Settings },

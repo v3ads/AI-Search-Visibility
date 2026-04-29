@@ -1063,7 +1063,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Determine which models to use based on plan
       const org = await storage.getOrgById(req.session.orgId!);
-      const modelsToUse = org?.hasAllModels
+      const isPaidPlan = org?.plan && org.plan !== "free";
+      const useAllModels = isPaidPlan || org?.hasAllModels;
+      const modelsToUse = useAllModels
         ? ["ChatGPT", "Claude", "Google Gemini", "Grok"]
         : [...FREE_MODELS];
 
