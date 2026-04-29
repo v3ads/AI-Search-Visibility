@@ -1,5 +1,5 @@
 import { LogoMark } from '@/components/logo';
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Eye, PieChart, Trophy, Shield, SmilePlus,
@@ -34,6 +34,11 @@ export function AppSidebar() {
   const { isMobile, setOpenMobile } = useSidebar();
 
   const closeOnMobile = () => { if (isMobile) setOpenMobile(false); };
+
+  // Close mobile sidebar whenever the route changes
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [location, isMobile, setOpenMobile]);
   const { projects, activeProject, activeProjectId, setActiveProjectId, isLoading } = useProjectContext();
   const { org } = useAuth();
   const [wizardOpen, setWizardOpen] = useState(false);
