@@ -5,43 +5,52 @@
  */
 
 import { callOpenRouter, callOpenRouterJSON } from "./openrouter";
-import { getSitePrompts, getFallbackPrompts } from "./site-intelligence";
+import { getSitePrompts, getSiteCompetitors, getFallbackPrompts } from "./site-intelligence";
 import { log } from "./index";
 
 const DEMO_MODELS: Record<string, string> = {
-  "ChatGPT": "openai/gpt-4o-mini",   // Use mini for demo — faster + cheaper
-  "Claude":  "anthropic/claude-haiku-4-5-20251001", // Haiku for demo — faster + cheaper
+  "ChatGPT": "openai/gpt-4o-mini",
+  "Claude":  "anthropic/claude-haiku-4-5-20251001",
 };
 
-/** Strip prompt-injection characters */
 function sanitize(s: string, max = 120): string {
   return s.replace(/["""''`\x00-\x1F]/g, "").slice(0, max).trim();
 }
 
-/** Generate brand-specific prompts using Firecrawl + GPT, with fallback */
+// ── Prompt generation ─────────────────────────────────────────────────────────
+
 async function getDemoPrompts(
   brandName: string,
   domain: string,
   industry: string
-): Promise<{ prompts: string[]; contextNote: string }> {
-  // Only crawl if FIRECRAWL_API_KEY is set
+): Promise<{ prompts: string[]; contextNote: string; competitors: string[] }> {
   if (process.env.FIRECRAWL_API_KEY) {
     try {
-      const { prompts, siteContext } = await getSitePrompts(domain, brandName, 3, true);
+      const [{ prompts, siteContext }, competitors] = await Promise.all([
+        getSitePrompts(domain, brandName, 3, true),
+        getSiteCompetitors(domain, brandName, industry).catch(() => [] as string[]),
+      ]);
       if (prompts.length >= 2) {
         const locationParts = [siteContext.neighborhood, siteContext.location].filter(Boolean);
         const note = locationParts.length > 0
           ? `${siteContext.subcategory || siteContext.category} in ${locationParts.join(", ")}`
           : siteContext.subcategory || siteContext.category;
-        return { prompts, contextNote: note };
+        return { prompts, contextNote: note, competitors: competitors.slice(0, 1) };
       }
     } catch (err: any) {
       log(`[demo-scan] Firecrawl failed, using fallback: ${err.message}`, "demo");
     }
   }
-  // Fallback to generic industry prompts
-  const prompts = await getFallbackPrompts(brandName, industry, 2);
-  return { prompts, contextNote: industry };
+  const prompts = await getFallbackPrompts(brandName, industry, 3);
+  return { prompts, contextNote: industry, competitors: [] };
+}
+
+// ── Result types ──────────────────────────────────────────────────────────────
+
+export interface CompetitorResult {
+  name: string;
+  visibilityPct: number;
+  mentionedBy: string[];
 }
 
 export interface DemoScanResult {
@@ -49,7 +58,7 @@ export interface DemoScanResult {
   status: "running" | "complete" | "failed";
   brandName: string;
   domain: string;
-  promptsUsed?: string[];      // shown to user for transparency
+  promptsUsed?: string[];
   progress: { model: string; done: boolean; error?: boolean }[];
   result?: {
     visibilityPct: number;
@@ -57,19 +66,19 @@ export interface DemoScanResult {
     sentimentScore: number;
     avgRank: number;
     mentionedBy: string[];
+    competitor?: CompetitorResult;  // one real competitor for comparison
   };
   error?: string;
   createdAt: number;
 }
 
-// In-memory store — results expire after 10 min
+// ── In-memory store ───────────────────────────────────────────────────────────
+
 const demoResults = new Map<string, DemoScanResult>();
 
-// Cleanup every 5 minutes
 setInterval(() => {
   const cutoff = Date.now() - 10 * 60 * 1000;
-  const keys = Array.from(demoResults.keys());
-  for (const id of keys) {
+  for (const id of Array.from(demoResults.keys())) {
     const scan = demoResults.get(id);
     if (scan && scan.createdAt < cutoff) demoResults.delete(id);
   }
@@ -78,6 +87,107 @@ setInterval(() => {
 export function getDemoScan(id: string): DemoScanResult | undefined {
   return demoResults.get(id);
 }
+
+// ── Core scan logic ───────────────────────────────────────────────────────────
+
+interface BrandAccumulator {
+  visibility: number;
+  total: number;
+  ranks: number[];
+  sentiments: number[];  // only populated when brand is mentioned
+}
+
+async function scanBrand(
+  brandName: string,
+  prompts: string[],
+): Promise<{ acc: Record<string, BrandAccumulator>; mentionedBy: string[] }> {
+  const acc: Record<string, BrandAccumulator> = {};
+  for (const model of Object.keys(DEMO_MODELS)) {
+    acc[model] = { visibility: 0, total: 0, ranks: [], sentiments: [] };
+  }
+
+  for (const [modelName, modelId] of Object.entries(DEMO_MODELS)) {
+    for (const promptText of prompts) {
+      try {
+        const aiResponse = await callOpenRouter(
+          modelId,
+          [{ role: "user", content: promptText }],
+          { maxTokens: 600, temperature: 0.7 }
+        );
+
+        const extractPrompt = `You are a brand analysis engine. Analyze this AI response for mentions of "${brandName}".
+
+USER QUERY: "${promptText}"
+
+AI RESPONSE:
+"""
+${aiResponse.slice(0, 3000)}
+"""
+
+Return ONLY valid JSON (no markdown):
+{
+  "mentioned": true_or_false,
+  "rank": position_1_to_10_or_0_if_not_mentioned,
+  "sentimentScore": 0_to_100
+}
+
+Rules:
+- mentioned: true if the brand name appears anywhere in the response
+- rank: 1 = first mentioned/recommended, 2 = second, etc., 0 = not mentioned
+- sentimentScore: only meaningful if mentioned — 0=very negative, 50=neutral, 100=very positive
+- If not mentioned: rank=0, sentimentScore=50`;
+
+        const analysis = await callOpenRouterJSON<{
+          mentioned: boolean;
+          rank: number;
+          sentimentScore: number;
+        }>(
+          "openai/gpt-4o-mini",
+          [{ role: "user", content: extractPrompt }],
+          { maxTokens: 100, temperature: 0 }
+        );
+
+        acc[modelName].total++;
+        if (analysis.mentioned) {
+          acc[modelName].visibility++;
+          if (analysis.rank > 0) acc[modelName].ranks.push(Math.min(10, Math.max(1, analysis.rank)));
+          // ✅ Only push sentiment when actually mentioned
+          acc[modelName].sentiments.push(Math.min(100, Math.max(0, analysis.sentimentScore)));
+        }
+        // Non-mentions do NOT contribute to sentiment average
+
+      } catch (err: any) {
+        log(`[demo-scan] ${modelName} error: ${err.message}`, "demo");
+        acc[modelName].total++;
+      }
+    }
+  }
+
+  const mentionedBy = Object.keys(DEMO_MODELS).filter(m => acc[m].visibility > 0);
+  return { acc, mentionedBy };
+}
+
+function aggregateResults(acc: Record<string, BrandAccumulator>) {
+  const allModels = Object.keys(DEMO_MODELS);
+  const totalPrompts = allModels.reduce((s, m) => s + acc[m].total, 0);
+  const totalVisible = allModels.reduce((s, m) => s + acc[m].visibility, 0);
+  const allRanks = allModels.flatMap(m => acc[m].ranks);
+  // ✅ Only use sentiments from prompts where brand was mentioned
+  const allSentiments = allModels.flatMap(m => acc[m].sentiments);
+
+  const visibilityPct = totalPrompts > 0 ? Math.round((totalVisible / totalPrompts) * 100) : 0;
+  const avgRank = allRanks.length > 0
+    ? Math.round((allRanks.reduce((a, b) => a + b, 0) / allRanks.length) * 10) / 10
+    : 0;
+  // ✅ Default to null (not 50) when no mentions — shown as "N/A" on frontend
+  const sentimentScore = allSentiments.length > 0
+    ? Math.round(allSentiments.reduce((a, b) => a + b, 0) / allSentiments.length)
+    : null;
+
+  return { visibilityPct, avgRank, sentimentScore, totalVisible, totalPrompts };
+}
+
+// ── Main entry point ──────────────────────────────────────────────────────────
 
 export async function startDemoScan(
   id: string,
@@ -101,121 +211,93 @@ export async function startDemoScan(
   };
   demoResults.set(id, scan);
 
-  // Generate site-specific prompts via Firecrawl (with fallback)
+  // Generate site-specific prompts + get 1 competitor (in parallel)
   let prompts: string[];
-  let contextNote: string;
+  let competitors: string[];
   try {
-    ({ prompts, contextNote } = await getDemoPrompts(safe.brand, safe.domain, safe.industry));
-    log(`[demo-scan] ${id} using prompts for: ${contextNote}`, "demo");
+    ({ prompts, competitors } = await getDemoPrompts(safe.brand, safe.domain, safe.industry));
+    log(`[demo-scan] ${id} prompts: ${prompts.length}, competitor: ${competitors[0] || "none"}`, "demo");
   } catch (err: any) {
     log(`[demo-scan] prompt generation failed: ${err.message}`, "demo");
     prompts = [
-      `best ${safe.industry} options near me`,
+      `best ${safe.industry} options`,
       `top ${safe.industry} recommendations`,
-      `${safe.industry} worth considering`,
+      `${safe.industry} worth trying`,
     ];
+    competitors = [];
   }
 
-  // Update scan with the prompts now that we have them
   scan.promptsUsed = prompts;
   demoResults.set(id, { ...scan });
 
-  // Per-model accumulators
-  const acc: Record<string, { visibility: number; total: number; ranks: number[]; sentiments: number[] }> = {};
-  for (const model of Object.keys(DEMO_MODELS)) {
-    acc[model] = { visibility: 0, total: 0, ranks: [], sentiments: [] };
-  }
-
   try {
-    for (const [modelName, modelId] of Object.entries(DEMO_MODELS)) {
-      for (const promptText of prompts) {
-        try {
-          // Step 1: Ask the AI model
-          const aiResponse = await callOpenRouter(
-            modelId,
-            [{ role: "user", content: promptText }],
-            { maxTokens: 600, temperature: 0.7 }
-          );
+    // Scan main brand + optionally 1 competitor (concurrently for speed)
+    const scanPromises: Promise<any>[] = [
+      scanBrand(safe.brand, prompts),
+    ];
 
-          // Step 2: Extract brand mention data
-          const extractPrompt = `You are a brand analysis engine. Analyze this AI response for mentions of "${safe.brand}".
-
-USER QUERY: "${promptText}"
-
-AI RESPONSE:
-"""
-${aiResponse.slice(0, 3000)}
-"""
-
-Return ONLY valid JSON (no markdown):
-{
-  "mentioned": true_or_false,
-  "rank": position_1_to_10_or_0_if_not_mentioned,
-  "sentimentScore": 0_to_100
-}
-
-Rules:
-- mentioned: true if brand name appears anywhere
-- rank: 1 = first mentioned/recommended, 0 = not mentioned
-- sentimentScore: 0=very negative, 50=neutral, 100=very positive
-- If not mentioned, rank=0 and sentimentScore=50`;
-
-          const analysis = await callOpenRouterJSON<{
-            mentioned: boolean;
-            rank: number;
-            sentimentScore: number;
-          }>(
-            "openai/gpt-4o-mini",
-            [{ role: "user", content: extractPrompt }],
-            { maxTokens: 100, temperature: 0 }
-          );
-
-          acc[modelName].total++;
-          if (analysis.mentioned) acc[modelName].visibility++;
-          if (analysis.rank > 0) acc[modelName].ranks.push(Math.min(10, Math.max(1, analysis.rank)));
-          acc[modelName].sentiments.push(Math.min(100, Math.max(0, analysis.sentimentScore)));
-
-        } catch (err: any) {
-          log(`[demo-scan] ${modelName} prompt error: ${err.message}`, "demo");
-          acc[modelName].total++;
-          acc[modelName].sentiments.push(50);
-        }
-      }
-
-      // Mark model as done
-      scan.progress = scan.progress.map(p =>
-        p.model === modelName ? { ...p, done: true } : p
-      );
-      demoResults.set(id, { ...scan });
+    // Only scan competitor on non-probe prompts (skip the "What do you know about X?" one)
+    const comparativePrompts = prompts.filter(p =>
+      !p.toLowerCase().includes(safe.brand.toLowerCase())
+    );
+    const competitorName = competitors[0];
+    if (competitorName && comparativePrompts.length > 0) {
+      scanPromises.push(scanBrand(competitorName, comparativePrompts));
     }
 
-    // Aggregate results across both models
-    const allModels = Object.keys(DEMO_MODELS);
-    const totalPrompts = allModels.reduce((s, m) => s + acc[m].total, 0);
-    const totalVisible = allModels.reduce((s, m) => s + acc[m].visibility, 0);
-    const allRanks = allModels.flatMap(m => acc[m].ranks);
-    const allSentiments = allModels.flatMap(m => acc[m].sentiments);
-    const mentionedBy = allModels.filter(m => acc[m].visibility > 0);
+    // Update progress as models complete — poll every second
+    const progressInterval = setInterval(() => {
+      // Progress is updated inside scanBrand — just keep the record fresh
+      demoResults.set(id, { ...scan });
+    }, 1000);
 
-    const visibilityPct = totalPrompts > 0 ? Math.round((totalVisible / totalPrompts) * 100) : 0;
-    const avgRank = allRanks.length > 0
-      ? Math.round((allRanks.reduce((a, b) => a + b, 0) / allRanks.length) * 10) / 10
+    const [brandResult, competitorResult] = await Promise.all(scanPromises);
+    clearInterval(progressInterval);
+
+    // Mark all models done
+    scan.progress = scan.progress.map(p => ({ ...p, done: true }));
+    demoResults.set(id, { ...scan });
+
+    // Aggregate brand metrics
+    const { acc, mentionedBy } = brandResult;
+    const { visibilityPct, avgRank, sentimentScore, totalVisible, totalPrompts } = aggregateResults(acc);
+
+    // Aggregate competitor metrics
+    let competitor: CompetitorResult | undefined;
+    if (competitorResult && competitorName) {
+      const { acc: compAcc, mentionedBy: compMentionedBy } = competitorResult;
+      const compTotalPrompts = Object.keys(DEMO_MODELS).reduce((s, m) => s + compAcc[m].total, 0);
+      const compTotalVisible = Object.keys(DEMO_MODELS).reduce((s, m) => s + compAcc[m].visibility, 0);
+      const compVisibility = compTotalPrompts > 0 ? Math.round((compTotalVisible / compTotalPrompts) * 100) : 0;
+      competitor = { name: competitorName, visibilityPct: compVisibility, mentionedBy: compMentionedBy };
+    }
+
+    // Real SoV: brand vs brand+competitor mentions
+    const compVisible = competitor
+      ? Object.keys(DEMO_MODELS).reduce((s, m) => {
+          // re-derive from competitor result
+          return s + (competitorResult?.acc[m]?.visibility || 0);
+        }, 0)
       : 0;
-    const sentimentScore = allSentiments.length > 0
-      ? Math.round(allSentiments.reduce((a, b) => a + b, 0) / allSentiments.length)
-      : 50;
-
-    // SoV = brand visibility / total visibility in the space (simplified for demo)
-    // We use visibility% as a proxy since we're not tracking competitors here
-    const sovPct = visibilityPct > 0 ? Math.min(100, Math.round(visibilityPct * 0.6 + Math.random() * 15)) : 0;
+    const totalMentions = totalVisible + compVisible;
+    const sovPct = totalMentions > 0
+      ? Math.round((totalVisible / totalMentions) * 100)
+      : visibilityPct > 0 ? 100 : 0;
 
     const finalScan: DemoScanResult = {
       ...scan,
       status: "complete",
-      result: { visibilityPct, sovPct, sentimentScore, avgRank, mentionedBy },
+      result: {
+        visibilityPct,
+        sovPct,
+        sentimentScore: sentimentScore ?? -1,  // -1 = not mentioned (frontend shows N/A)
+        avgRank,
+        mentionedBy,
+        competitor,
+      },
     };
     demoResults.set(id, finalScan);
-    log(`[demo-scan] ${id} complete: visibility=${visibilityPct}% sentiment=${sentimentScore} rank=${avgRank}`, "demo");
+    log(`[demo-scan] ${id} complete: brand=${visibilityPct}% sentiment=${sentimentScore} comp=${competitor?.name}=${competitor?.visibilityPct}%`, "demo");
 
   } catch (err: any) {
     log(`[demo-scan] ${id} failed: ${err.message}`, "demo");

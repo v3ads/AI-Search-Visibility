@@ -117,6 +117,7 @@ function DemoSection() {
   const [result, setResult] = useState<{
     visibilityPct: number; sovPct: number; sentimentScore: number;
     avgRank: number; mentionedBy: string[];
+    competitor?: { name: string; visibilityPct: number; mentionedBy: string[] };
   } | null>(null);
   const [promptsUsed, setPromptsUsed] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
@@ -274,7 +275,9 @@ function DemoSection() {
               <div className="pb-metric-label">Share of Voice</div>
             </div>
             <div className="pb-metric-tile">
-              <div className="pb-metric-value" style={{ color: "#f59e0b" }}>{result.sentimentScore}/100</div>
+              <div className="pb-metric-value" style={{ color: result.sentimentScore < 0 ? "#475569" : "#f59e0b", fontSize: result.sentimentScore < 0 ? 16 : undefined }}>
+                {result.sentimentScore < 0 ? "No mentions" : `${result.sentimentScore}/100`}
+              </div>
               <div className="pb-metric-label">Sentiment Score</div>
             </div>
             <div className="pb-metric-tile">
@@ -284,6 +287,37 @@ function DemoSection() {
               <div className="pb-metric-label">Avg AI Ranking</div>
             </div>
           </div>
+
+          {result.competitor && (
+            <div style={{ marginBottom: 14, padding: "14px", background: "rgba(255,255,255,0.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)" }}>
+              <p style={{ fontSize: 10, color: "#475569", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "IBM Plex Mono,monospace", marginBottom: 10 }}>AI Visibility vs Competitor</p>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: "#A855F7", fontWeight: 600 }}>{brand}</span>
+                  <span style={{ fontSize: 12, color: "#A855F7", fontWeight: 700 }}>{result.visibilityPct}%</span>
+                </div>
+                <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${result.visibilityPct}%`, background: "linear-gradient(90deg,#A855F7,#7C3AED)", borderRadius: 3 }}/>
+                </div>
+              </div>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: "#64748B" }}>{result.competitor.name}</span>
+                  <span style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>{result.competitor.visibilityPct}%</span>
+                </div>
+                <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${result.competitor.visibilityPct}%`, background: "#334155", borderRadius: 3 }}/>
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: "#475569", marginTop: 8, fontFamily: "IBM Plex Mono,monospace" }}>
+                {result.visibilityPct > result.competitor.visibilityPct
+                  ? `${brand} leads ${result.competitor.name} in AI search`
+                  : result.visibilityPct === result.competitor.visibilityPct
+                  ? `Tied with ${result.competitor.name}`
+                  : `${result.competitor.name} is ${result.competitor.visibilityPct - result.visibilityPct}% ahead in AI search`}
+              </p>
+            </div>
+          )}
 
           <div className="pb-locked-section">
             <div className="pb-locked-blur">
