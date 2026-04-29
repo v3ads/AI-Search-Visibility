@@ -121,11 +121,19 @@ function AppHeader() {
 }
 
 function ProjectRouter() {
-  const { activeProjectId, projects, isLoading } = useProjectContext();
+  const { activeProjectId, setActiveProjectId, projects, isLoading } = useProjectContext();
   const { org } = useAuth();
   const [location, navigate] = useLocation();
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardPrefill, setWizardPrefill] = useState<{ brand: string; domain: string; industry: string } | undefined>();
+
+  // Sync activeProjectId from URL when navigating directly to a project sub-route
+  useEffect(() => {
+    const match = location.match(/^\/projects\/(proj_[^/]+)/);
+    if (match && match[1] && match[1] !== activeProjectId) {
+      setActiveProjectId(match[1]);
+    }
+  }, [location, activeProjectId, setActiveProjectId]);
 
   // Detect post-demo signup redirect and restore context
   useEffect(() => {
