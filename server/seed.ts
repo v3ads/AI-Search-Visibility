@@ -27,6 +27,14 @@ export async function seedDatabase() {
       email: adminEmail, passwordHash: hash, name: "Vipay Manshalaby", emailVerified: true,
     }).returning();
     console.log("[seed] Created admin user:", adminEmail);
+  } else {
+    // Always re-hash and update the admin password on startup to ensure it's correct
+    const hash = await bcrypt.hash(adminPassword, 10);
+    [adminUser] = await db.update(users)
+      .set({ passwordHash: hash, emailVerified: true })
+      .where(eq(users.email, adminEmail))
+      .returning();
+    console.log("[seed] Updated admin password hash for:", adminEmail);
   }
 
   // ── Demo user ──────────────────────────────────────────────────────────────
