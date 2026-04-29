@@ -38,6 +38,7 @@ export const organizations = pgTable("organizations", {
   hasApiAccess: boolean("has_api_access").default(false),
   hasWhiteLabel: boolean("has_white_label").default(false),
   hasScheduledScans: boolean("has_scheduled_scans").default(false),
+  hasAllModels: boolean("has_all_models").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -234,12 +235,15 @@ export type ApiKey = typeof apiKeys.$inferSelect;
 
 // ── Plan Config ───────────────────────────────────────────────────────────────
 export const PLAN_LIMITS = {
-  free:       { maxProjects: 1, maxCompetitors: 3,   maxPrompts: 10,  maxScansPerMonth: 1,   hasApiAccess: false, hasWhiteLabel: false, hasScheduledScans: false },
-  starter:    { maxProjects: 1, maxCompetitors: 5,   maxPrompts: 50,  maxScansPerMonth: 4,   hasApiAccess: false, hasWhiteLabel: false, hasScheduledScans: false },
-  growth:     { maxProjects: 5, maxCompetitors: 15,  maxPrompts: 200, maxScansPerMonth: 20,  hasApiAccess: true,  hasWhiteLabel: false, hasScheduledScans: true  },
-  agency:     { maxProjects: 25,maxCompetitors: 999, maxPrompts: 999, maxScansPerMonth: 999, hasApiAccess: true,  hasWhiteLabel: true,  hasScheduledScans: true  },
-  enterprise: { maxProjects: 999,maxCompetitors:999, maxPrompts: 999, maxScansPerMonth: 999, hasApiAccess: true,  hasWhiteLabel: true,  hasScheduledScans: true  },
+  free:       { maxProjects: 1, maxCompetitors: 1,   maxPrompts: 3,   maxScansPerMonth: 1,   hasApiAccess: false, hasWhiteLabel: false, hasScheduledScans: false, hasAllModels: false },
+  starter:    { maxProjects: 1, maxCompetitors: 5,   maxPrompts: 50,  maxScansPerMonth: 4,   hasApiAccess: false, hasWhiteLabel: false, hasScheduledScans: false, hasAllModels: true  },
+  growth:     { maxProjects: 5, maxCompetitors: 15,  maxPrompts: 200, maxScansPerMonth: 20,  hasApiAccess: true,  hasWhiteLabel: false, hasScheduledScans: true,  hasAllModels: true  },
+  agency:     { maxProjects: 25,maxCompetitors: 999, maxPrompts: 999, maxScansPerMonth: 999, hasApiAccess: true,  hasWhiteLabel: true,  hasScheduledScans: true,  hasAllModels: true  },
+  enterprise: { maxProjects: 999,maxCompetitors:999, maxPrompts: 999, maxScansPerMonth: 999, hasApiAccess: true,  hasWhiteLabel: true,  hasScheduledScans: true,  hasAllModels: true  },
 } as const;
+
+// Free plan only scans these 2 models — enough to demonstrate value, not enough to act without upgrading
+export const FREE_MODELS = ["ChatGPT", "Claude"] as const;
 
 export const PLAN_PRICES: Record<string, { monthly: number; name: string; description: string; stripePriceId?: string }> = {
   free:      { monthly: 0,   name: "Free",       description: "1 scan to see how you rank in AI search" },

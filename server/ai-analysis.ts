@@ -115,21 +115,24 @@ export async function runAnalysis(
 
   const competitors = await storage.getCompetitors(projectId);
   const competitorNames = competitors.map((c) => c.brandName);
-  const models = Object.keys(MODEL_MAP);
 
   // Always use the run created by the route handler — never create a second one
   const existing = await storage.getAnalysisRun(existingRunId);
   if (!existing) throw new Error("Analysis run not found");
   const run = existing;
 
-  const total = activePrompts.length * models.length;
+  // Use only the models specified on the run (respects plan restrictions)
+  const allowedModelNames = run.modelsUsed ?? Object.keys(MODEL_MAP);
+  const modelsToRun = Object.entries(MODEL_MAP).filter(([name]) => allowedModelNames.includes(name));
+
+  const total = activePrompts.length * modelsToRun.length;
 
   emitScanEvent(run.id, {
     type: "start",
     runId: run.id,
     totalPrompts: activePrompts.length,
-    totalModels: models.length,
-    models,
+    totalModels: modelsToRun.length,
+    models: modelsToRun.map(([name]) => name),
   });
 
   const today = new Date().toISOString().split("T")[0];
@@ -142,7 +145,7 @@ export async function runAnalysis(
 
   try {
     for (const prompt of activePrompts) {
-      for (const [displayName, modelId] of Object.entries(MODEL_MAP)) {
+      for (const [displayName, modelId] of modelsToRun) {
         emitScanEvent(run.id, {
           type: "progress",
           runId: run.id,

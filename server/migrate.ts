@@ -180,6 +180,7 @@ async function migrate() {
     await addColumnIfMissing(pool, 'organizations', 'has_api_access', 'BOOLEAN NOT NULL DEFAULT false');
     await addColumnIfMissing(pool, 'organizations', 'has_white_label', 'BOOLEAN NOT NULL DEFAULT false');
     await addColumnIfMissing(pool, 'organizations', 'has_scheduled_scans', 'BOOLEAN NOT NULL DEFAULT false');
+    await addColumnIfMissing(pool, 'organizations', 'has_all_models', 'BOOLEAN NOT NULL DEFAULT false');
     // Rename camelCase columns in organizations if they exist
     await renameColumnIfExists(pool, 'organizations', 'stripeCustomerId', 'stripe_customer_id');
     await renameColumnIfExists(pool, 'organizations', 'stripeSubscriptionId', 'stripe_subscription_id');

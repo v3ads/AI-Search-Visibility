@@ -9,6 +9,7 @@ import { seedDatabase } from "./seed";
 import {
   insertPromptSchema, insertBoostActionSchema, insertTagSchema,
   insertCompetitorSchema, insertProjectSchema, PLAN_LIMITS, PLAN_PRICES,
+  FREE_MODELS,
   type Prompt,
 } from "@shared/schema";
 import { runAnalysis } from "./ai-analysis";
@@ -162,6 +163,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         hasApiAccess: PLAN_LIMITS.free.hasApiAccess,
         hasWhiteLabel: PLAN_LIMITS.free.hasWhiteLabel,
         hasScheduledScans: PLAN_LIMITS.free.hasScheduledScans,
+        hasAllModels: PLAN_LIMITS.free.hasAllModels,
       });
       await storage.addOrgMember(org.id, user.id, "owner");
 
@@ -864,13 +866,19 @@ Rules:
       const activePrompts = (await storage.getPrompts(req.params.id as string)).filter((p) => p.isActive);
       if (activePrompts.length === 0) return res.status(400).json({ message: "No active prompts to analyze" });
 
+      // Determine which models to use based on plan
+      const org = await storage.getOrgById(req.session.orgId!);
+      const modelsToUse = org?.hasAllModels
+        ? ["ChatGPT", "Claude", "Google Gemini", "Grok"]
+        : [...FREE_MODELS];
+
       // Create the run first, then increment — if run creation fails we don't waste a scan
       const run = await storage.createAnalysisRun({
         projectId: req.params.id as string,
         status: "running",
-        totalPrompts: activePrompts.length * 4,
+        totalPrompts: activePrompts.length * modelsToUse.length,
         completedPrompts: 0,
-        modelsUsed: ["ChatGPT", "Claude", "Google Gemini", "Grok"],
+        modelsUsed: modelsToUse,
       });
 
       // Increment only after run record exists
