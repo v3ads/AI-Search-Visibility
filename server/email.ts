@@ -75,7 +75,7 @@ function baseTemplate(content: string): string {
 }
 
 export async function sendVerificationEmail(to: string, name: string, token: string): Promise<void> {
-  const verifyUrl = `${APP_URL}/verify-email?token=${token}`;
+  const verifyUrl = `${APP_URL}/api/auth/verify-email?token=${token}`;
   await sendEmail({
     to: [{ email: to, name }],
     subject: "Verify your PlumBoost email address",
