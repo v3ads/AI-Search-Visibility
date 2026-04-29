@@ -105,7 +105,14 @@ function ScanButton() {
       toast({ title: "Scan Started", description: "Querying AI models with your prompts. This may take a few minutes." });
     } catch (err: any) {
       setScanning(false);
-      toast({ title: "Scan Failed", description: err.message, variant: "destructive" });
+      const isNoPrompts = err.message?.includes("No active prompts");
+      toast({
+        title: "Scan Failed",
+        description: isNoPrompts
+          ? "You need to add prompts before running a scan. Go to the Prompts page to add search queries for your brand."
+          : err.message,
+        variant: "destructive",
+      });
     }
   };
 
